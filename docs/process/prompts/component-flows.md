@@ -1,6 +1,6 @@
 # コンポーネント別フロー図の作成プロンプト
 
-`docs/architecture.md` の全体図にある 10 個のコンポーネントについて、それぞれの内部の処理フローを作るためのプロンプト集。
+`docs/design/architecture.md` の全体図にある 10 個のコンポーネントについて、それぞれの内部の処理フローを作るためのプロンプト集。
 
 使い方
 - 1 コンポーネント = 1 セッション。下の「プロンプト」の節から 1 つをコピーして、新しいセッションに貼る
@@ -14,8 +14,8 @@
 フロー図を作るときは、次のすべてに従うこと。
 
 ### 読むもの
-- `docs/architecture.md`: 全体図。担当するコンポーネントの入力と出力は、全体図の矢印のラベルと一致させる
-- `docs/ideas.md`: 要件の正本。プロンプトで指定された節を必ず読む。フロー図の中身は、ここに書かれていることだけで組み立てる
+- `docs/design/architecture.md`: 全体図。担当するコンポーネントの入力と出力は、全体図の矢印のラベルと一致させる
+- `docs/requirements.md`: 要件の正本。プロンプトで指定された節を必ず読む。フロー図の中身は、ここに書かれていることだけで組み立てる
 
 ### 図の書き方
 - Mermaid の `flowchart TD` で書く。Obsidian API とのやり取りの順序が要点になる場合だけ、`sequenceDiagram` を追加してよい
@@ -31,17 +31,17 @@
 - ラベルはすべて `"..."` で囲み、改行は `<br/>` を使う（Mermaid の構文エラーを防ぐため）
 
 ### 要件にないこと
-- `docs/ideas.md` に書かれていない処理や、書かれていても決まっていない点（「要検証」を含む）は、推測で埋めない
+- `docs/requirements.md` に書かれていない処理や、書かれていても決まっていない点（「要検証」を含む）は、推測で埋めない
 - そうした箇所は、図ではノードに `classDef undecided` の点線枠を付け、本文の「決める必要があること」に書き出す
-- `docs/ideas.md` と `docs/architecture.md` は編集しない（他のセッションと同時に編集すると衝突するため）。全体図の境界と矛盾する点を見つけたら、「決める必要があること」に書く
+- `docs/requirements.md` と `docs/design/architecture.md` は編集しない（他のセッションと同時に編集すると衝突するため）。全体図の境界と矛盾する点を見つけたら、「決める必要があること」に書く
 
 ### 既にあるフロー図との境界
-- `docs/flows/` に既にあるフロー図のうち、担当するコンポーネントと矢印でつながるものを読む
+- `docs/design/flows/` に既にあるフロー図のうち、担当するコンポーネントと矢印でつながるものを読む
 - それらのフロー図が決めている境界（受け渡すデータの形、どちらのコンポーネントが処理を担当するか）に合わせる
 - 合わせられない点や、既にあるフロー図の「決める必要があること」と同じ論点は、自分のファイルの「決める必要があること」に、相手のファイル名を添えて書く。相手のファイルは編集しない
 
 ### 出力するファイル
-- 保存先: `docs/flows/<番号>-<名前>.md`（番号と名前は各プロンプトで指定）
+- 保存先: `docs/design/flows/<番号>-<名前>.md`（番号と名前は各プロンプトで指定）
 - 構成
   1. `# <コンポーネント名> のフロー`、最終更新日、対応する要件 ID
   2. `## 役割`: 2〜3 文
@@ -52,7 +52,7 @@
 - 文章はすべて日本語で書く
 
 ### 終わり方
-- `docs/git-rules.md` に従い、そのファイルだけをコミットする。メッセージは `docs: <コンポーネント名> のフロー図を追加`
+- `docs/process/git-rules.md` に従い、そのファイルだけをコミットする。メッセージは `docs: <コンポーネント名> のフロー図を追加`
 - push はしない
 - 最後に、「決める必要があること」の要点を報告する
 
@@ -63,10 +63,10 @@
 ### 01. 変換対象の収集
 
 ```
-docs/prompts/component-flows.md の「共通の指示」に従って、コンポーネント「変換対象の収集」の処理フローを作ってください。
+docs/process/prompts/component-flows.md の「共通の指示」に従って、コンポーネント「変換対象の収集」の処理フローを作ってください。
 
-- 保存先: docs/flows/01-collect-targets.md
-- 読む節: docs/ideas.md の R2（後回しの項目は図に入れない）、R8 の「Excel のファイルの単位」
+- 保存先: docs/design/flows/01-collect-targets.md
+- 読む節: docs/requirements.md の R2（後回しの項目は図に入れない）、R8 の「Excel のファイルの単位」
 - 入力: 起動のきっかけ（ファイルの右クリック / フォルダの右クリック / 複数選択の右クリック / コマンド「現在のノートを変換」 / コマンド「Vault 全体を変換」）
 - 出力: 対象ノート一覧 → 「実行前の確認画面」へ
 - 必ず含める点
@@ -81,10 +81,10 @@ docs/prompts/component-flows.md の「共通の指示」に従って、コンポ
 ### 02. 実行前の確認画面
 
 ```
-docs/prompts/component-flows.md の「共通の指示」に従って、コンポーネント「実行前の確認画面」の処理フローを作ってください。
+docs/process/prompts/component-flows.md の「共通の指示」に従って、コンポーネント「実行前の確認画面」の処理フローを作ってください。
 
-- 保存先: docs/flows/02-confirm-modal.md
-- 読む節: docs/ideas.md の R2「対象確認モーダル」、R3「実行前」「書き込み時」の同名ファイルの扱い、R8「出力形式の選び方」、R6 の C-8（結合出力）
+- 保存先: docs/design/flows/02-confirm-modal.md
+- 読む節: docs/requirements.md の R2「対象確認モーダル」、R3「実行前」「書き込み時」の同名ファイルの扱い、R8「出力形式の選び方」、R6 の C-8（結合出力）
 - 入力: 対象ノート一覧 ← 「変換対象の収集」から
 - 出力: 実行指示 → 「1 件ずつ順に変換」へ
 - 必ず含める点
@@ -99,10 +99,10 @@ docs/prompts/component-flows.md の「共通の指示」に従って、コンポ
 ### 03. 1 件ずつ順に変換
 
 ```
-docs/prompts/component-flows.md の「共通の指示」に従って、コンポーネント「1 件ずつ順に変換」の処理フローを作ってください。
+docs/process/prompts/component-flows.md の「共通の指示」に従って、コンポーネント「1 件ずつ順に変換」の処理フローを作ってください。
 
-- 保存先: docs/flows/03-run-sequential.md
-- 読む節: docs/ideas.md の R3「実行中」「書き込み時」の使用中ファイルの扱い、R8「Excel のファイルの単位」、R6 の C-8（結合出力）
+- 保存先: docs/design/flows/03-run-sequential.md
+- 読む節: docs/requirements.md の R3「実行中」「書き込み時」の使用中ファイルの扱い、R8「Excel のファイルの単位」、R6 の C-8（結合出力）
 - 入力: 実行指示 ← 「実行前の確認画面」から、書き込み結果（成功 / 失敗 / スキップ）← 「ファイルの書き込み」から
 - 出力: ノート 1 件 → 「Markdown の構文解析と変換」へ、全件の結果 → 「実行結果の記録」へ
 - 必ず含める点
@@ -118,10 +118,10 @@ docs/prompts/component-flows.md の「共通の指示」に従って、コンポ
 ### 04. Markdown の構文解析と変換
 
 ```
-docs/prompts/component-flows.md の「共通の指示」に従って、コンポーネント「Markdown の構文解析と変換」の処理フローを作ってください。
+docs/process/prompts/component-flows.md の「共通の指示」に従って、コンポーネント「Markdown の構文解析と変換」の処理フローを作ってください。
 
-- 保存先: docs/flows/04-parse-transform.md
-- 読む節: docs/ideas.md の G2、R5 の「前提」「Word: リンク・埋め込み」（A-17〜A-23）、A-2、A-16、A-0b
+- 保存先: docs/design/flows/04-parse-transform.md
+- 読む節: docs/requirements.md の G2、R5 の「前提」「Word: リンク・埋め込み」（A-17〜A-23）、A-2、A-16、A-0b
 - 入力: ノート 1 件 ← 「1 件ずつ順に変換」から、HTML / SVG ← 「Obsidian に描画を依頼」から
 - 出力: mdast → 「.docx の生成」「.xlsx の生成」へ、Mermaid ソース → 「Mermaid の画像化」へ、描画依頼 → 「Obsidian に描画を依頼」へ
 - 必ず含める点
@@ -137,10 +137,10 @@ docs/prompts/component-flows.md の「共通の指示」に従って、コンポ
 ### 05. Obsidian に描画を依頼
 
 ```
-docs/prompts/component-flows.md の「共通の指示」に従って、コンポーネント「Obsidian に描画を依頼」の処理フローを作ってください。
+docs/process/prompts/component-flows.md の「共通の指示」に従って、コンポーネント「Obsidian に描画を依頼」の処理フローを作ってください。
 
-- 保存先: docs/flows/05-obsidian-render.md
-- 読む節: docs/ideas.md の G2「HTML を取り込む経路」、R5 の A-0a、A-0b、A-11（数式）、A-24〜A-26（Dataview・他プラグイン）
+- 保存先: docs/design/flows/05-obsidian-render.md
+- 読む節: docs/requirements.md の G2「HTML を取り込む経路」、R5 の A-0a、A-0b、A-11（数式）、A-24〜A-26（Dataview・他プラグイン）
 - 入力: 描画依頼 ← 「Markdown の構文解析と変換」から
 - 出力: HTML / SVG → 「Markdown の構文解析と変換」へ
 - 必ず含める点
@@ -155,10 +155,10 @@ docs/prompts/component-flows.md の「共通の指示」に従って、コンポ
 ### 06. Mermaid の画像化
 
 ```
-docs/prompts/component-flows.md の「共通の指示」に従って、コンポーネント「Mermaid の画像化」の処理フローを作ってください。
+docs/process/prompts/component-flows.md の「共通の指示」に従って、コンポーネント「Mermaid の画像化」の処理フローを作ってください。
 
-- 保存先: docs/flows/06-mermaid-image.md
-- 読む節: docs/ideas.md の R1、R4、R8「画像ファイルを出すタイミング」、A-12、A-33
+- 保存先: docs/design/flows/06-mermaid-image.md
+- 読む節: docs/requirements.md の R1、R4、R8「画像ファイルを出すタイミング」、A-12、A-33
 - 入力: Mermaid ソース ← 「Markdown の構文解析と変換」から
 - 出力: SVG / PNG → 「.docx の生成」へ、PNG → 「.xlsx の生成」へ、画像ファイル → 「ファイルの書き込み」へ
 - 必ず含める点
@@ -175,10 +175,10 @@ docs/prompts/component-flows.md の「共通の指示」に従って、コンポ
 ### 07. .docx の生成
 
 ```
-docs/prompts/component-flows.md の「共通の指示」に従って、コンポーネント「.docx の生成」の処理フローを作ってください。
+docs/process/prompts/component-flows.md の「共通の指示」に従って、コンポーネント「.docx の生成」の処理フローを作ってください。
 
-- 保存先: docs/flows/07-docx-render.md
-- 読む節: docs/ideas.md の G3、R5 の Word に関する項目（A-1〜A-27）、R6 全体、R4「Word に貼るときのサイズ」「Word への埋め込み形式」
+- 保存先: docs/design/flows/07-docx-render.md
+- 読む節: docs/requirements.md の G3、R5 の Word に関する項目（A-1〜A-27）、R6 全体、R4「Word に貼るときのサイズ」「Word への埋め込み形式」
 - 入力: mdast ← 「Markdown の構文解析と変換」から、SVG / PNG ← 「Mermaid の画像化」から
 - 出力: .docx → 「ファイルの書き込み」へ
 - 必ず含める点
@@ -192,10 +192,10 @@ docs/prompts/component-flows.md の「共通の指示」に従って、コンポ
 ### 08. .xlsx の生成
 
 ```
-docs/prompts/component-flows.md の「共通の指示」に従って、コンポーネント「.xlsx の生成」の処理フローを作ってください。
+docs/process/prompts/component-flows.md の「共通の指示」に従って、コンポーネント「.xlsx の生成」の処理フローを作ってください。
 
-- 保存先: docs/flows/08-xlsx-render.md
-- 読む節: docs/ideas.md の G3、R5 の Excel に関する項目（A-30〜A-34）、R7 全体、R8「Excel のファイルの単位」
+- 保存先: docs/design/flows/08-xlsx-render.md
+- 読む節: docs/requirements.md の G3、R5 の Excel に関する項目（A-30〜A-34）、R7 全体、R8「Excel のファイルの単位」
 - 入力: mdast ← 「Markdown の構文解析と変換」から、PNG ← 「Mermaid の画像化」から
 - 出力: .xlsx → 「ファイルの書き込み」へ
 - 必ず含める点
@@ -211,10 +211,10 @@ docs/prompts/component-flows.md の「共通の指示」に従って、コンポ
 ### 09. ファイルの書き込み
 
 ```
-docs/prompts/component-flows.md の「共通の指示」に従って、コンポーネント「ファイルの書き込み」の処理フローを作ってください。
+docs/process/prompts/component-flows.md の「共通の指示」に従って、コンポーネント「ファイルの書き込み」の処理フローを作ってください。
 
-- 保存先: docs/flows/09-write-file.md
-- 読む節: docs/ideas.md の G4、R3「書き込み時」、R8「置き場所」「ファイル名」、R1 の保存モード
+- 保存先: docs/design/flows/09-write-file.md
+- 読む節: docs/requirements.md の G4、R3「書き込み時」、R8「置き場所」「ファイル名」、R1 の保存モード
 - 入力: .docx ← 「.docx の生成」から、.xlsx ← 「.xlsx の生成」から、画像ファイル ← 「Mermaid の画像化」から
 - 出力: 書き込み結果（成功 / 失敗 / スキップ）→ 「1 件ずつ順に変換」へ
 - 必ず含める点
@@ -230,10 +230,10 @@ docs/prompts/component-flows.md の「共通の指示」に従って、コンポ
 ### 10. 実行結果の記録
 
 ```
-docs/prompts/component-flows.md の「共通の指示」に従って、コンポーネント「実行結果の記録」の処理フローを作ってください。
+docs/process/prompts/component-flows.md の「共通の指示」に従って、コンポーネント「実行結果の記録」の処理フローを作ってください。
 
-- 保存先: docs/flows/10-record-results.md
-- 読む節: docs/ideas.md の R3「実行後」、R4「古い画像の置き換え」、A-18 の「変換対象」の範囲
+- 保存先: docs/design/flows/10-record-results.md
+- 読む節: docs/requirements.md の R3「実行後」、R4「古い画像の置き換え」、A-18 の「変換対象」の範囲
 - 入力: 全件の結果 ← 「1 件ずつ順に変換」から
 - 出力: 結果レポートの画面表示、export-manifest.json の保存
 - 必ず含める点
