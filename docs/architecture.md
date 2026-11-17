@@ -7,7 +7,11 @@
 
 - 1 ノード = 1 コンポーネント。名前は「何をするか」を表し、括弧内に対応する要件 ID を書く
 - 実線の矢印 = データの流れ（ラベルは受け渡すもの）
+- 点線の矢印 = 制御の合図、または実行の文脈として渡す読み取り専用のデータ
+- 円柱 = ファイルとして保存するデータ
 - R3（安全な運用）は性質の違う機能の総称なので、「1 件ずつ順に変換」「ファイルの書き込み」「実行結果の記録」の 3 つに分けている。R3 のドライランは「実行前の確認画面」に含める
+- 「1 件ずつ順に変換」が全体を取りまとめる。構文解析の結果（mdast）はいったんここに戻り、出力単位（単一ノート / 1 フォルダ = 1 ブック / 結合出力など）とグループの情報を添えて .docx・.xlsx の生成に渡す（2026-11-17 決定）
+- タイムアウト時の `AbortSignal` は、図では「Markdown の構文解析と変換」への 1 本だけを描いている。実際には、ノートごとの文脈として描画・生成・書き込みのすべての処理に渡す（中断ボタンでは abort しない。R3）
 
 ```mermaid
 flowchart LR
@@ -20,23 +24,30 @@ flowchart LR
   Docx[".docx の生成<br/>(R6)"]
   Xlsx[".xlsx の生成<br/>(R7)"]
   Write["ファイルの書き込み<br/>出力パス決定・同名の扱い<br/>一時ファイル → rename<br/>(R8, R3)"]
-  Log["実行結果の記録<br/>結果レポート・export-manifest.json<br/>(R3)"]
+  Log["実行結果の記録<br/>結果レポート・マニフェストの読み書き<br/>(R3)"]
+  Manifest[("export-manifest.json<br/>(R3)")]
 
   Collect -->|対象ノート一覧| Confirm
   Confirm -->|実行指示| Run
+  Manifest -->|開始時に 1 回読む| Run
   Run -->|ノート 1 件| Pipe
   Pipe -->|描画依頼| Ext
-  Ext -->|HTML / SVG| Pipe
+  Ext -->|描画結果| Pipe
   Pipe -->|Mermaid ソース| Mmd
-  Pipe -->|mdast| Docx
-  Pipe -->|mdast| Xlsx
+  Pipe -->|mdast| Run
+  Run -->|mdast + 出力単位| Docx
+  Run -->|mdast + 出力単位| Xlsx
   Mmd -->|SVG / PNG| Docx
   Mmd -->|PNG| Xlsx
   Mmd -->|画像ファイル| Write
   Docx -->|.docx| Write
   Xlsx -->|.xlsx| Write
-  Write -->|成功 / 失敗 / スキップ| Run
-  Run -->|全件の結果| Log
+  Write -->|出力ファイルごとの結果| Run
+  Run -->|ノートごとの結果| Log
+  Log -->|最後に 1 回保存| Manifest
+  Run -.->|マニフェストの写し| Pipe
+  Run -.->|マニフェストの写し| Mmd
+  Run -.->|AbortSignal（タイムアウト時）| Pipe
 ```
 
 ## コンポーネントごとの処理フロー
