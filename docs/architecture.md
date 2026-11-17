@@ -39,6 +39,23 @@ flowchart LR
   Run -->|全件の結果| Log
 ```
 
+## コンポーネントごとの処理フロー
+
+各コンポーネントの内部の処理フローは、次のファイルに分けている。各ファイルの末尾に、まだ決まっていない点（「決める必要があること」）がある。
+
+| コンポーネント | フロー図 |
+|---|---|
+| 変換対象の収集 | [01-collect-targets.md](flows/01-collect-targets.md) |
+| 実行前の確認画面 | [02-confirm-modal.md](flows/02-confirm-modal.md) |
+| 1 件ずつ順に変換 | [03-run-sequential.md](flows/03-run-sequential.md) |
+| Markdown の構文解析と変換 | [04-parse-transform.md](flows/04-parse-transform.md) |
+| Obsidian に描画を依頼 | [05-obsidian-render.md](flows/05-obsidian-render.md) |
+| Mermaid の画像化 | [06-mermaid-image.md](flows/06-mermaid-image.md) |
+| .docx の生成 | [07-docx-render.md](flows/07-docx-render.md) |
+| .xlsx の生成 | [08-xlsx-render.md](flows/08-xlsx-render.md) |
+| ファイルの書き込み | [09-write-file.md](flows/09-write-file.md) |
+| 実行結果の記録 | [10-record-results.md](flows/10-record-results.md) |
+
 ## この粒度で表していないもの
 
 - Obsidian API に依存する部分と依存しない部分（G2・G4）の境界。1 つのコンポーネントの中に両方が混ざるため
