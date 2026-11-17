@@ -119,3 +119,14 @@
 
 - 公開までは非公開（private）リポジトリで管理してよい。フェーズ6 の前に公開に切り替える
 - push する前に、`.gitignore` の対象（`data.json`、変換結果）が入っていないことを `git status` で確認する
+
+---
+
+## 7. Claude Code によるコミットの自動化
+
+- `.claude/settings.json` の Stop hook（`.claude/hooks/require-commit.sh`）が、Claude の応答が終わるときに `git status` を確認する
+- 未コミットの変更があれば、Claude に「本ルールの書式でコミットしてから終える」よう指示する。コミットメッセージは Claude が差分を読んで書く
+- 変更が複数の論理的なまとまりに分かれる場合、Claude はコミットを分ける
+- Obsidian で手作業で編集した未コミットの変更も、次に Claude が応答を終えるときに同じ扱いでコミットされる
+- push は自動では行わない
+- 一時的に止めたいとき: `.claude/settings.json` の `"Stop"` の項目を削除する（または Claude に頼む）

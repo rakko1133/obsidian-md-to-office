@@ -1,0 +1,17 @@
+{
+  "hooks": {
+    "Stop": [
+      {
+        "hooks": [
+          {
+            "type": "command",
+            "command": "bash \"$CLAUDE_PROJECT_DIR/.claude/hooks/require-commit.sh\"",
+            "shell": "bash",
+            "timeout": 30,
+            "statusMessage": "未コミットの変更を確認中..."
+          }
+        ]
+      }
+    ]
+  }
+}
