@@ -56,11 +56,11 @@ A. ビルド
 - [x] A3. `docx` と `exceljs` を依存に入れた状態でビルドが通る。`main.js` の大きさを記録する（目安 3 MB 以下: U3）
 
 B. Obsidian での動作（テスト用 Vault で確認）
-- [ ] B1. ビルド結果をテスト用 Vault のプラグインフォルダに置く手順があり、コミュニティプラグインとして有効にできる
-- [ ] B2. `manifest.json`（`id: batch-office-export`、`isDesktopOnly: true`、`version: 0.0.1`、確認した `minAppVersion`）と `versions.json` がある
-- [ ] B3. 設定画面が開き、項目を1つ以上表示できる。変更した値が `data.json` に保存され、Obsidian を再起動しても残る
-- [ ] B4. 開発用のコマンドを実行すると、空の .docx と .xlsx がテスト用 Vault にでき、Word と LibreOffice で開ける（G3・G4 の要検証「`exceljs` が Electron のレンダラプロセスで動くか」を、フェーズ 0 で確かめる）
-- [ ] B5. UI の文字列を、英語・日本語の言語別リソースに分けて書いている（H6）
+- [x] B1. ビルド結果をテスト用 Vault のプラグインフォルダに置く手順があり、コミュニティプラグインとして有効にできる
+- [x] B2. `manifest.json`（`id: batch-office-export`、`isDesktopOnly: true`、`version: 0.0.1`、確認した `minAppVersion`）と `versions.json` がある
+- [x] B3. 設定画面が開き、項目を1つ以上表示できる。変更した値が `data.json` に保存され、Obsidian を再起動しても残る
+- [x] B4. 開発用のコマンドを実行すると、空の .docx と .xlsx がテスト用 Vault にでき、Word と LibreOffice で開ける（G3・G4 の要検証「`exceljs` が Electron のレンダラプロセスで動くか」を、フェーズ 0 で確かめる）
+- [x] B5. UI の文字列を、英語・日本語の言語別リソースに分けて書いている（H6）
 
 C. テストと構成
 - [x] C1. `npm test` で Vitest が動き、サンプルのテストが1本通る
@@ -76,7 +76,7 @@ E. 文書
 
 F. リポジトリ
 - [ ] F1. `feat/scaffold` ブランチで作業し、`main` にマージしてタグ `0.0.1` を付ける（`docs/process/git-rules.md` の 2 章・4 章）
-- [ ] F2. ビルド結果・`node_modules`・`data.json` が Git の管理対象に入っておらず、作業ツリーに未コミットの変更がない
+- [x] F2. ビルド結果・`node_modules`・`data.json` が Git の管理対象に入っておらず、作業ツリーに未コミットの変更がない
 
 フェーズ 0 に含めないもの: 変換の機能、対象の選び方、コンポーネント間の受け渡しの型（フェーズ 1 の最初に定義する）
 
