@@ -29,3 +29,7 @@ Thumbs.db
 
 # Obsidian に入れた他者製のプラグイン本体（main.js は上の規則で除外済み。残りだけ入れても動かないため、フォルダごと除外）
 .obsidian/plugins/
+
+# テスト用 Vault: Obsidian の操作状態と、配置したプラグイン本体（npm run deploy:test-vault でコピーする）
+test-vault/.obsidian/*
+!test-vault/.obsidian/community-plugins.json
