@@ -1,0 +1,28 @@
+# 依存（package-lock.json から再生成できる）
+node_modules/
+
+# ビルド成果物（配布は GitHub Releases に添付する）
+main.js
+*.map
+dist/
+coverage/
+
+# Obsidian の操作状態・個人の設定値
+.obsidian/workspace*.json
+data.json
+
+# 変換結果（実行のたびに生成されるバイナリ）
+test-vault/**/_export/
+*.docx
+*.xlsx
+~$*
+
+# 機密
+.env
+.env.*
+
+# エディタ・OS・Claude Code の個人設定
+.vscode/
+.DS_Store
+Thumbs.db
+.claude/settings.local.json
