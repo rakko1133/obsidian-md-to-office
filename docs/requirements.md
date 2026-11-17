@@ -75,7 +75,7 @@ E. 文書
 - [x] E3. 決めた `minAppVersion` と、A3 で記録した `main.js` の大きさを、この文書（G5・U3）に書く
 
 F. リポジトリ
-- [ ] F1. `feat/scaffold` ブランチで作業し、`main` にマージしてタグ `0.0.1` を付ける（`docs/process/git-rules.md` の 2 章・4 章）
+- [x] F1. `feat/scaffold` ブランチで作業し、`main` にマージしてタグ `0.0.1` を付ける（`docs/process/git-rules.md` の 2 章・4 章）
 - [x] F2. ビルド結果・`node_modules`・`data.json` が Git の管理対象に入っておらず、作業ツリーに未コミットの変更がない
 
 フェーズ 0 に含めないもの: 変換の機能、対象の選び方、コンポーネント間の受け渡しの型（フェーズ 1 の最初に定義する）
