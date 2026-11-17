@@ -203,7 +203,7 @@ Obsidian の Markdown(.md) ノートを、Word(.docx) と Excel(.xlsx) に **一
 ### 実行後
 - 結果レポート: 成功・失敗・スキップ件数、未対応記法・リンク切れの警告を一覧表示
 - 出力マニフェスト: 生成ファイルの一覧（出力パス・元ノート・内容ハッシュ・日時）を JSON で保存。後回し項目（手編集の検知、Undo、孤立ファイル掃除）や R2 の差分変換の土台にする
-  - 保存場所（評価で追記・Claude 推奨）: プラグインのデータフォルダ（`{Vault}/.obsidian/plugins/batch-office-export/manifest.json`）。パスは Vault 内の相対パス、Vault 外の出力は出力ルートからの相対パスで記録し、Vault を移しても使えるようにする。Vault 内の出力フォルダに置かないのは、同期の対象やファイルエクスプローラーの表示に混ざるのを避けるため
+  - 保存場所（評価で追記・Claude 推奨）: プラグインのデータフォルダ（`{Vault}/.obsidian/plugins/batch-office-export/export-manifest.json`）。ファイル名を `manifest.json` にしないのは、同じフォルダにある Obsidian のプラグイン定義ファイル `manifest.json` と衝突するため。パスは Vault 内の相対パス、Vault 外の出力は出力ルートからの相対パスで記録し、Vault を移しても使えるようにする。Vault 内の出力フォルダに置かないのは、同期の対象やファイルエクスプローラーの表示に混ざるのを避けるため
 
 ### R3 で後回しにしたもの
 - [ ] 事前検証（プリフライトチェック）: 書き込み権限、Windows のパス長制限（MAX_PATH 260）、ファイル名の禁止文字（`<>:"|?*`）、空き容量
