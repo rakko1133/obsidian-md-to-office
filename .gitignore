@@ -26,3 +26,6 @@ test-vault/**/_export/
 .DS_Store
 Thumbs.db
 .claude/settings.local.json
+
+# Obsidian に入れた他者製のプラグイン本体（main.js は上の規則で除外済み。残りだけ入れても動かないため、フォルダごと除外）
+.obsidian/plugins/
