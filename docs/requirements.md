@@ -51,9 +51,9 @@ Obsidian の Markdown(.md) ノートを、Word(.docx) と Excel(.xlsx) に **一
 ### フェーズ 0 の完了条件（ユーザー承認・2026-11-18）
 
 A. ビルド
-- [ ] A1. `npm install` → `npm run build` が成功し、`main.js` ができる。TypeScript の型エラーが 0 件
-- [ ] A2. `npm run dev` で、変更を監視してビルドし直せる
-- [ ] A3. `docx` と `exceljs` を依存に入れた状態でビルドが通る。`main.js` の大きさを記録する（目安 3 MB 以下: U3）
+- [x] A1. `npm install` → `npm run build` が成功し、`main.js` ができる。TypeScript の型エラーが 0 件
+- [x] A2. `npm run dev` で、変更を監視してビルドし直せる
+- [x] A3. `docx` と `exceljs` を依存に入れた状態でビルドが通る。`main.js` の大きさを記録する（目安 3 MB 以下: U3）
 
 B. Obsidian での動作（テスト用 Vault で確認）
 - [ ] B1. ビルド結果をテスト用 Vault のプラグインフォルダに置く手順があり、コミュニティプラグインとして有効にできる
@@ -63,16 +63,16 @@ B. Obsidian での動作（テスト用 Vault で確認）
 - [ ] B5. UI の文字列を、英語・日本語の言語別リソースに分けて書いている（H6）
 
 C. テストと構成
-- [ ] C1. `npm test` で Vitest が動き、サンプルのテストが1本通る
-- [ ] C2. `src/` を「Obsidian に依存しない中核」と「Obsidian に依存する部分」に分け、中核が `obsidian` を import していないことを、テストまたはビルド時の検査で確かめる（G2・G4）
+- [x] C1. `npm test` で Vitest が動き、サンプルのテストが1本通る
+- [x] C2. `src/` を「Obsidian に依存しない中核」と「Obsidian に依存する部分」に分け、中核が `obsidian` を import していないことを、テストまたはビルド時の検査で確かめる（G2・G4）
 
 D. テスト用 Vault
-- [ ] D1. `test-vault/` を作り、Mermaid の全図種のサンプル（1図 = 1ノート）を入れる。ほかの記法のサンプルは、使うフェーズで足す（G5）
+- [x] D1. `test-vault/` を作り、Mermaid の全図種のサンプル（1図 = 1ノート）を入れる。ほかの記法のサンプルは、使うフェーズで足す（G5）
 
 E. 文書
-- [ ] E1. `docs/design/settings.md` に、v1 のすべての設定項目の一覧表（キー・既定値・関係する要件）を作る。実装はまだしない（G5）
-- [ ] E2. 依存ライブラリとライセンスの一覧を作る（G1・G5）
-- [ ] E3. 決めた `minAppVersion` と、A3 で記録した `main.js` の大きさを、この文書（G5・U3）に書く
+- [x] E1. `docs/design/settings.md` に、v1 のすべての設定項目の一覧表（キー・既定値・関係する要件）を作る。実装はまだしない（G5）
+- [x] E2. 依存ライブラリとライセンスの一覧を作る（G1・G5）
+- [x] E3. 決めた `minAppVersion` と、A3 で記録した `main.js` の大きさを、この文書（G5・U3）に書く
 
 F. リポジトリ
 - [ ] F1. `feat/scaffold` ブランチで作業し、`main` にマージしてタグ `0.0.1` を付ける（`docs/process/git-rules.md` の 2 章・4 章）
@@ -97,6 +97,7 @@ F. リポジトリ
   - 「Word」「Excel」「Office」は Microsoft の商標。説明文や README では「Office 形式のファイルに変換する」意味で使い、Microsoft の製品だと誤解される書き方はしない
   - 申請する直前（フェーズ 6）に、もう一度重複がないか確認する
 - [ ] U3. 非機能要件の目標値。Claude の提案: 1,000 ノートを一括で変換している間も UI が固まらないこと（R3）、`main.js` は 3 MB 以下を目安にすること（G2 のバンドルサイズ）。処理時間の目標はフェーズ 2 で実測してから決める
+  - 実測（フェーズ 0・2026-11-18）: `docx` と `exceljs` を含む本番ビルドの `main.js` は **1.05 MB**（1,105,881 バイト）。3 MB の目安の範囲内。変換の機能を足すたびに `npm run build` の表示で確認する
 - [ ] U4. 文書の分割: 実装段階に入ったら、この `requirements.md` を要件の一覧にとどめ、詳細仕様を要件ごとのファイル（例: `docs/spec/R5.md`）に切り出すか
 
 ---
@@ -156,6 +157,7 @@ F. リポジトリ
 - テスト用 Vault: 各記法のサンプルノート（R5 の A-1〜A-34 を1つずつ含む）と、Mermaid の全図種のサンプルを用意する。各フェーズの動作確認に使う
   - 作る時期（ユーザー承認・2026-11-18）: Mermaid の全図種はフェーズ 0 で作る。各記法のサンプルは、その記法を扱うフェーズの最初に足す（まだ使わないノートを先に作らないため）
 - 対応する Obsidian の最小バージョン（`minAppVersion`）: 開発開始時点の最新の安定版に合わせる
+  - 決定値（フェーズ 0・2026-11-18）: **1.15.1**（2026-11-12 公開の最新の安定版。GitHub の obsidian-releases で確認）。型定義の `obsidian` パッケージは 1.14.4（npm の最新）を使う
 - 依存ライブラリのライセンス確認（G1 の条件）: `docx`、`exceljs`、unified / remark 系、`picomatch`、Temml または MathJax など。新しく依存を足すたびに確認する
   - 評価で追記: `mathml2omml` のライセンスは **LGPL-3.0-or-later**（npm で確認）で、G1 の条件（MIT / Apache-2.0 等）に合わないため使わない。MathML → OMML の変換は A-11 のとおり別の方法をとる。Temml は MIT
 - .docx レンダラのテスト（評価で追記）: 生成した .docx を展開し、`word/document.xml` をスナップショットテストで比較する。あわせて、テスト用 Vault の変換結果を Word と LibreOffice で開けることを各フェーズの終わりに目視で確認する
