@@ -1,6 +1,6 @@
 # 要件一覧: Obsidian md → Word / Excel 一括変換プラグイン
 
-最終更新: 2026-11-17
+最終更新: 2026-11-18
 段階: 要件の整理が完了 → 実装の準備（雛形作成）へ。進める順番は「ロードマップ」を参照
 
 状態の凡例
@@ -47,6 +47,38 @@ Obsidian の Markdown(.md) ノートを、Word(.docx) と Excel(.xlsx) に **一
 | 6 | 公開準備: 英語・日本語の UI、README、LICENSE、GitHub Releases、コミュニティプラグインへの申請 | G1, H6 |
 
 - 各フェーズの完了条件（評価で追記）: フェーズを始めるときに「何ができれば完了か」を箇条書きで決め、ここに追記する。完了条件は、テスト用 Vault（G5）のどのノートがどう変換されればよいか、の形で書く
+
+### フェーズ 0 の完了条件（ユーザー承認・2026-11-18）
+
+A. ビルド
+- [ ] A1. `npm install` → `npm run build` が成功し、`main.js` ができる。TypeScript の型エラーが 0 件
+- [ ] A2. `npm run dev` で、変更を監視してビルドし直せる
+- [ ] A3. `docx` と `exceljs` を依存に入れた状態でビルドが通る。`main.js` の大きさを記録する（目安 3 MB 以下: U3）
+
+B. Obsidian での動作（テスト用 Vault で確認）
+- [ ] B1. ビルド結果をテスト用 Vault のプラグインフォルダに置く手順があり、コミュニティプラグインとして有効にできる
+- [ ] B2. `manifest.json`（`id: batch-office-export`、`isDesktopOnly: true`、`version: 0.0.1`、確認した `minAppVersion`）と `versions.json` がある
+- [ ] B3. 設定画面が開き、項目を1つ以上表示できる。変更した値が `data.json` に保存され、Obsidian を再起動しても残る
+- [ ] B4. 開発用のコマンドを実行すると、空の .docx と .xlsx がテスト用 Vault にでき、Word と LibreOffice で開ける（G3・G4 の要検証「`exceljs` が Electron のレンダラプロセスで動くか」を、フェーズ 0 で確かめる）
+- [ ] B5. UI の文字列を、英語・日本語の言語別リソースに分けて書いている（H6）
+
+C. テストと構成
+- [ ] C1. `npm test` で Vitest が動き、サンプルのテストが1本通る
+- [ ] C2. `src/` を「Obsidian に依存しない中核」と「Obsidian に依存する部分」に分け、中核が `obsidian` を import していないことを、テストまたはビルド時の検査で確かめる（G2・G4）
+
+D. テスト用 Vault
+- [ ] D1. `test-vault/` を作り、Mermaid の全図種のサンプル（1図 = 1ノート）を入れる。ほかの記法のサンプルは、使うフェーズで足す（G5）
+
+E. 文書
+- [ ] E1. `docs/design/settings.md` に、v1 のすべての設定項目の一覧表（キー・既定値・関係する要件）を作る。実装はまだしない（G5）
+- [ ] E2. 依存ライブラリとライセンスの一覧を作る（G1・G5）
+- [ ] E3. 決めた `minAppVersion` と、A3 で記録した `main.js` の大きさを、この文書（G5・U3）に書く
+
+F. リポジトリ
+- [ ] F1. `feat/scaffold` ブランチで作業し、`main` にマージしてタグ `0.0.1` を付ける（`docs/process/git-rules.md` の 2 章・4 章）
+- [ ] F2. ビルド結果・`node_modules`・`data.json` が Git の管理対象に入っておらず、作業ツリーに未コミットの変更がない
+
+フェーズ 0 に含めないもの: 変換の機能、対象の選び方、コンポーネント間の受け渡しの型（フェーズ 1 の最初に定義する）
 
 ---
 
@@ -122,12 +154,13 @@ Obsidian の Markdown(.md) ノートを、Word(.docx) と Excel(.xlsx) に **一
 - 言語とビルド: TypeScript + esbuild（Obsidian 公式のサンプルプラグインの構成に合わせる）
 - 単体テスト: Vitest。G2 の構文解析・変換の段を、Obsidian を起動せずにテストする
 - テスト用 Vault: 各記法のサンプルノート（R5 の A-1〜A-34 を1つずつ含む）と、Mermaid の全図種のサンプルを用意する。各フェーズの動作確認に使う
+  - 作る時期（ユーザー承認・2026-11-18）: Mermaid の全図種はフェーズ 0 で作る。各記法のサンプルは、その記法を扱うフェーズの最初に足す（まだ使わないノートを先に作らないため）
 - 対応する Obsidian の最小バージョン（`minAppVersion`）: 開発開始時点の最新の安定版に合わせる
 - 依存ライブラリのライセンス確認（G1 の条件）: `docx`、`exceljs`、unified / remark 系、`picomatch`、Temml または MathJax など。新しく依存を足すたびに確認する
   - 評価で追記: `mathml2omml` のライセンスは **LGPL-3.0-or-later**（npm で確認）で、G1 の条件（MIT / Apache-2.0 等）に合わないため使わない。MathML → OMML の変換は A-11 のとおり別の方法をとる。Temml は MIT
 - .docx レンダラのテスト（評価で追記）: 生成した .docx を展開し、`word/document.xml` をスナップショットテストで比較する。あわせて、テスト用 Vault の変換結果を Word と LibreOffice で開けることを各フェーズの終わりに目視で確認する
 - Obsidian に依存する部分のテスト（評価で追記）: Mermaid の描画や `MarkdownRenderer` を使う部分は Vitest では動かせない。テスト用 Vault での手動確認とし、確認する手順をチェックリストにする
-- 設定の一覧（評価で追記）: 設定項目が多いため、フェーズ 0 で「設定の一覧表（キー・既定値・関係する要件）」を `docs/settings.md` に作り、実装と設定画面の設計はそれに従う
+- 設定の一覧（評価で追記）: 設定項目が多いため、フェーズ 0 で「設定の一覧表（キー・既定値・関係する要件）」を `docs/design/settings.md` に作り、実装と設定画面の設計はそれに従う
 - Obsidian に同梱されたライブラリ（mermaid.js、MathJax、Prism）は、Obsidian の更新でバージョンが変わる前提で作る（R4 のキャッシュ判定にバージョンを含める）
 
 ---
