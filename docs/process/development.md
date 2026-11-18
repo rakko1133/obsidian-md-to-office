@@ -105,6 +105,15 @@ Obsidian を使う確認は自動化していない（G5）。テスト用 Vault
 - [ ] E1: 書き出した後、`_export/` の中に `.tmp` で終わるファイルがない。元のノートの更新日時が変わっていない
 - [ ] E2: 結果レポートに件数（成功・スキップ・失敗）と警告が出る。`phase1/folder-a/broken.md` は失敗、`no-diagram.md` はスキップになる。`test-vault/.obsidian/plugins/batch-office-export/export-manifest.json` に、`_export/...` の相対パスで記録されている
 
+## フェーズ 5a の手動確認（完了条件 A）
+
+開発用の自動実行で確かめる。サンプルは `test-vault/combine/`（MOC `combine.md`、`order` 付きの 2 本、表と図の 1 本、サブフォルダ `sub/`）。
+
+- [x] 結合出力の見た目（2026-11-18 Claude が確認。テストと同じ部品で作った .docx を Word で描画）: 表紙（MOC の title / author / date、ヘッダー・フッターなし）、目次（開いたときに更新され、章と見出しとページ番号が入る）、章が並び順どおりで改ページ、ヘッダーのタイトル、フッターの「n / 総ページ数」、章ごとの脚注、章の間のリンク
+- [ ] Obsidian での結合出力: `npm run obsidian:run -- --mode docx --path combine --combine`（`--set combineOrder=moc --set coverPage=true --set headerTitle=true` も）。実際の Mermaid の図が章ごとに入る
+- [ ] 1 ノート = 1 .docx のフッターのページ番号: `--mode docx --path word/01-headings.md`
+- [ ] 確認画面のチェックボックス「1 フォルダを 1 つの .docx にまとめる」（画面の確認。形式が Excel のときは出ない、変えると予定が `{フォルダ名}.docx` になる）
+
 ## フェーズ 4b の手動確認（完了条件 A）
 
 開発用の自動実行で確かめる（画面は操作しない）。`npm run build:dev` → `npm run deploy:test-vault` → 次のコマンド → `npm run preview:export`。
