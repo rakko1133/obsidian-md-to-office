@@ -1,7 +1,7 @@
 # コンポーネント構成
 
-最終更新: 2026-11-17
-段階: 要件単位の全体図（試作）。要件の正本は `docs/requirements.md`
+最終更新: 2026-11-19
+段階: 要件単位の全体図（試作）と、実装（1.0.2）の実行順の図。要件の正本は `docs/requirements.md`
 
 ## 全体図（要件単位）
 
@@ -52,6 +52,83 @@ flowchart LR
   Run -.->|マニフェストの写し| Pipe
   Run -.->|マニフェストの写し| Mmd
   Run -.->|AbortSignal（タイムアウト時）| Pipe
+```
+
+## 実装の実行順（1.0.2 時点）
+
+上の全体図はコンポーネント間のデータの流れを表す。ここでは、実装したコードが実際に処理を進める順序を表す。括弧内の番号は下の「コンポーネントごとの処理フロー」の番号に対応する。
+
+### 実行全体（`src/obsidian/export-runner.ts` の `runExport`）
+
+- 起動のモードは Word・Excel・両方（確認画面で形式を選ぶ）・Mermaid 画像として保存・Vault 全体の集計の 5 つ。モードごとに違うのは、確認画面の題名・ドライラン・ノート 1 件の処理・`start`・`finish` だけで、流れは共通
+- 中止は 4 か所: 実行中またはアクティブノートなし・外部出力先が未設定 / 除外後の対象が 0 件 / Mermaid レンダラを作れない / 確認画面で取り消し
+- 中断・fail-fast で止まっても、`finish` で処理済みの分からブック・結合 .docx を完成させ、マニフェストを保存する
+- 開発用の自動実行（`dev-automation.ts`）では、確認画面ですべての候補を選んだことにし、結果画面を出さずに結果を返す
+
+```mermaid
+flowchart TD
+  Start["起動（右クリック / コマンド）<br/>Word・Excel・両方・Mermaid・集計"]
+  Check["事前チェック<br/>実行中か・アクティブノート・外部出力先"]
+  Collect["変換対象の収集 (01)<br/>glob と export:false で除外"]
+  Prepare["実行環境の準備<br/>Mermaid レンダラ・書き込み先・Vault 環境"]
+  Confirm["実行前の確認画面 (02)<br/>ドライラン・形式と結合の選択"]
+  Begin["実行の開始処理<br/>マニフェスト読込・Word テンプレート・start"]
+  Run["1 件ずつ順に変換 (03)<br/>タイムアウト・中断・fail-fast"]
+  Finish["グループの完成（finish）<br/>1 フォルダ = 1 ブック・結合 .docx"]
+  Record["実行結果の記録 (10)<br/>マニフェスト保存・キャッシュ整理"]
+  Report["結果レポートを表示<br/>自動実行では表示せず値を返す"]
+  Abort(["中止<br/>Notice を出す"])
+
+  Start --> Check
+  Check -->|OK| Collect
+  Collect -->|対象あり| Prepare
+  Prepare -->|OK| Confirm
+  Confirm -->|実行| Begin
+  Begin --> Run
+  Run -->|ノートごとに繰り返す| Run
+  Run --> Finish
+  Finish --> Record
+  Record --> Report
+  Check -->|実行中・ノートなし・出力先なし| Abort
+  Collect -->|0 件| Abort
+  Prepare -->|レンダラを作れない| Abort
+  Confirm -->|取り消し・0 件選択| Abort
+```
+
+### ノート 1 件の処理（各モードの `process`）
+
+- ノートの組み立て（`src/core/note-assembly.ts` の `assembleNote`）は Word と Excel で共通
+- 「両方」は同じノートで Word 側と Excel 側を順に実行し、`mergeResults` で 1 つの結果にまとめる
+- 「Mermaid 画像として保存」は Word 側の (06) → (09) だけを通る。Word でも設定 `saveImageFiles` が有効なら画像ファイルを保存する
+- 「Vault 全体の集計」は Excel 側と同じ形で、`SummaryRun` がシートを足す
+- ノートの結果は、出力ファイルの結果のうちいちばん重いもの（失敗 > スキップ > 成功: D5）
+
+```mermaid
+flowchart TD
+  Note["ノート 1 件<br/>AbortSignal 付き"]
+  Assemble["ノートの組み立て (04, 05)<br/>構文解析・埋め込み展開・プラグイン描画"]
+
+  subgraph Word["Word（docx）"]
+    Mmd["Mermaid の画像化 (06)<br/>SVG / PNG・キャッシュ"]
+    Docx[".docx の生成 (07)<br/>1 ノート = 1 .docx / 結合"]
+    WriteW["書き込み (09)<br/>上書き・スキップ・別名で保存"]
+    Mmd --> Docx --> WriteW
+  end
+
+  subgraph Excel["Excel（xlsx / 集計）"]
+    Tables["表の取り出し<br/>表がなければスキップ"]
+    Sheet["ブックにシートを追加 (08)<br/>表形式 / アウトライン形式"]
+    WriteX["書き込み (09)<br/>1 フォルダ = 1 ブックは finish で"]
+    Tables --> Sheet --> WriteX
+  end
+
+  Result["ノートの結果（NoteResult）<br/>失敗 > スキップ > 成功 で集約"]
+
+  Note --> Assemble
+  Assemble --> Mmd
+  Assemble --> Tables
+  WriteW --> Result
+  WriteX --> Result
 ```
 
 ## コンポーネントごとの処理フロー
