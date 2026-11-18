@@ -16,6 +16,7 @@ G1 の条件: 配布物に含めるライブラリは、再配布できるライ
 | `remark-frontmatter` | 5.0.0 | MIT | frontmatter を本文から外す | R5 |
 | `remark-math` | 6.0.0 | MIT | 数式 `$…$`・`$$…$$` の構文解析（フェーズ 3b）。LaTeX → Word の数式は `docx` の `docx/math`（`latexToMath`）で行う | R5 |
 | `picomatch` | 4.0.7 | MIT | glob の判定（R2） | R2 |
+| `fflate` | 0.8.3 | MIT | Word のテンプレート（.docx / .dotx）から styles.xml を取り出す、見出しの番号の定義を直す（C-1b・C-1c）。`docx` の依存としてすでに main.js に含まれていたもので、直接の依存にしてもサイズは増えない（ユーザー承認・2026-11-18） | R6 |
 | `mathjax-full` | 3.2.2 | Apache-2.0 | `latexToMath` で Word の数式にできない式を SVG にする（A-11 の代替）。Obsidian 同梱の MathJax は SVG を作れないため同梱する。main.js が約 1.7 MB 増える（大半は SVG 出力の TeX フォントの字形データ） | R5 |
 
 上の 8 パッケージ自身と、そこから辿れる間接的な依存（計 265 件、`node_modules` 上で確認・フェーズ 3b 時点）のライセンスは次のとおり。いずれも G1 の条件を満たす。

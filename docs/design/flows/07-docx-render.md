@@ -409,3 +409,14 @@ flowchart TD
 - 結合出力で、同じ .docx に入っていない変換対象内のノートへのリンク: 今回の対象ならその文書（フォルダの .docx）への相対リンク、マニフェストにある過去の変換なら `{ノート名}.docx` への相対リンク
 - 結合出力の文書プロパティ: MOC の frontmatter（`title`・`author`）→ フォルダ名・設定の作成者名
 - 表紙・目次・ヘッダー・フッター: `docx` ライブラリの `titlePage`（先頭ページのみ別指定）・`TableOfContents`（`TOC \h \o "1-3"`、開いたときに更新を求める dirty の状態）・`features.updateFields`・`PageNumber.CURRENT` / `TOTAL_PAGES`
+
+## 決定済み（2026-11-18・フェーズ 5b）
+
+詳細は `docs/requirements.md` の「フェーズ 5b の決定事項」。実装は `src/core/docx-render.ts`・`src/core/docx-template.ts`・`src/core/docx-export.ts`（`styleOptions`）。
+
+- 見出しのスタイル（C-1a）: 内蔵の見出し 1〜6・表題に大きさ・太字・前後の間隔・keepNext / keepLines
+- テンプレート（C-1b）: `fflate` で .docx / .dotx から `word/styles.xml` を取り出して `externalStyles` に、テーマは docx の `readTheme` で `theme` に渡す。テンプレートがあるときは内蔵の既定（フォント・見出しの大きさ）を渡さず、テンプレートにない内蔵の段落スタイル（Quote・SourceCode・Caption）だけを補う。組み込みスタイルの ID は名前から docx ライブラリの ID（Heading1 など）に付け直す（日本語版の Word は `1` などで保存するため）
+- 段落番号（C-1c）: 番号の定義 `heading-numbering`（%1 / %1.%2 / …、後ろは空白）を見出しの段落が参照する。docx ライブラリが付ける開始番号の上書きは、パック後に numbering.xml から見出しの定義の分だけ取り除く（Word の PDF で番号が戻るのを防ぐ）
+- 見出し 1 の前の改ページ（C-2）: `pageBreakBefore`。最初のブロックと、直前が改ページのときは付けない
+- 表の幅（C-6）: `tblW` を 100%（pct）
+- 図表番号（R4・C-4b）: 段落スタイル Caption、「ラベル 番号: キャプション」。番号は `SEQ ラベル` フィールド。図は Mermaid の図と画像だけの段落の後ろ、表は前（次の段落と同じページ）
