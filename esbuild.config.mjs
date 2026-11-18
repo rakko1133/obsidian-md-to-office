@@ -4,11 +4,21 @@
 //   node esbuild.config.mjs production  本番ビルドを 1 回だけ作る
 import esbuild from "esbuild";
 import { builtinModules } from "node:module";
-import { statSync } from "node:fs";
+import { existsSync, readFileSync, statSync } from "node:fs";
 
 const mode = process.argv[2];
 const prod = mode === "production";
 const once = prod || mode === "once";
+
+// 本番ビルドでは、同梱したパッケージのライセンス文（THIRD_PARTY_NOTICES.md）を main.js の末尾にコメントで入れる。
+// 配布物は main.js 単体で Vault に置かれるため（G1: MIT・Apache-2.0 はライセンス文の同梱を求める）
+const NOTICES = "THIRD_PARTY_NOTICES.md";
+const footer = prod && existsSync(NOTICES)
+	? { js: `/*! Batch Office Export bundles third-party packages. Their licenses follow.
+
+${readFileSync(NOTICES, "utf8").replaceAll("*/", "* /")}
+*/` }
+	: undefined;
 
 const context = await esbuild.context({
 	entryPoints: ["src/main.ts"],
@@ -42,6 +52,7 @@ const context = await esbuild.context({
 	sourcemap: prod ? false : "inline",
 	treeShaking: true,
 	minify: prod,
+	footer,
 	outfile: "main.js",
 });
 
