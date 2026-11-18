@@ -197,7 +197,7 @@ Claude 推奨（ユーザー承認）
 ### フェーズ 3b の決定事項（2026-11-18）
 
 ユーザー決定
-- 数式（A-11）: `remark-math`（MIT）を依存に足して `$…$`・`$$…$$` を構文解析し、docx ライブラリの `latexToMath`（`docx/math`、既存の依存）で Word の数式（OMML）にする。変換できない式は Obsidian 同梱の MathJax（`loadMathJax()`）で SVG（PNG の代替画像付き）にして警告する。MathJax も使えなければ LaTeX の原文を等幅で残す。LaTeX → MathML → OMML の経路と、MathML → OMML の自作は不要になった
+- 数式（A-11）: `remark-math`（MIT）を依存に足して `$…$`・`$$…$$` を構文解析し、docx ライブラリの `latexToMath`（`docx/math`、既存の依存）で Word の数式（OMML）にする。変換できない式はプラグインに同梱した MathJax（`mathjax-full`、Apache-2.0）で SVG（PNG の代替画像付き）にして警告する。MathJax も読めない式は LaTeX の原文を等幅で残す。（2026-11-18 更新、ユーザー決定: Obsidian 同梱の MathJax は CHTML 出力だけで SVG を作れないため同梱に切り替えた。main.js は約 1.7 MB 増える）LaTeX → MathML → OMML の経路と、MathML → OMML の自作は不要になった
 - Dataview（A-24）: `api.query()` は使わず、`dataview`・`dataviewjs`・他のプラグインのコードブロックを同じ方法（Obsidian に描画させた結果を取り込む）で扱う
 - 描画結果の HTML → mdast は自作の小さな変換にする（`hast-util-to-mdast` は使わない: G2 の検討事項を解決）
 
