@@ -1,4 +1,4 @@
-// 設定画面（G5）。項目の一覧と既定値は docs/design/settings.md に従う。フェーズ 1 までの項目を出す。
+// 設定画面（G5）。項目の一覧と既定値は docs/design/settings.md に従う。フェーズ 3a までの項目を出す。
 import { App, PluginSettingTab, Setting } from "obsidian";
 import { DEFAULT_SETTINGS, normalizeSettings, parseLines, type PluginSettings } from "../core/settings";
 import { t } from "../i18n";
@@ -168,6 +168,17 @@ export class BatchOfficeExportSettingTab extends PluginSettingTab {
 			.setName(t("settings.strictLineBreaks.name"))
 			.setDesc(t("settings.strictLineBreaks.desc"))
 			.addToggle((tg) => tg.setValue(s.strictLineBreaksFallback).onChange(async (v) => save("strictLineBreaksFallback", v)));
+		new Setting(containerEl)
+			.setName(t("settings.codeLineNumbers.name"))
+			.addToggle((tg) => tg.setValue(s.codeLineNumbers).onChange(async (v) => save("codeLineNumbers", v)));
+		new Setting(containerEl)
+			.setName(t("settings.keepComments.name"))
+			.setDesc(t("settings.keepComments.desc"))
+			.addToggle((tg) => tg.setValue(s.keepCommentsAsWordComments).onChange(async (v) => save("keepCommentsAsWordComments", v)));
+		new Setting(containerEl)
+			.setName(t("settings.frontmatterTable.name"))
+			.setDesc(t("settings.frontmatterTable.desc"))
+			.addToggle((tg) => tg.setValue(s.frontmatterTable).onChange(async (v) => save("frontmatterTable", v)));
 	}
 
 	override hide(): void {

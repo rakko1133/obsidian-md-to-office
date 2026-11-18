@@ -50,6 +50,11 @@ export const en = {
 	"settings.authorName.desc": "Written to the document properties. Leave empty to keep it empty.",
 	"settings.strictLineBreaks.name": "Strict line breaks (fallback)",
 	"settings.strictLineBreaks.desc": "Used only when Obsidian's own setting cannot be read. On: a single line break becomes a space.",
+	"settings.codeLineNumbers.name": "Line numbers in code blocks",
+	"settings.keepComments.name": "Keep comments as Word comments",
+	"settings.keepComments.desc": "Off: %%comments%% are removed. On: they become comments in the Word document.",
+	"settings.frontmatterTable.name": "Properties table at the top",
+	"settings.frontmatterTable.desc": "Adds a table of the note's properties (frontmatter) before the body.",
 
 	"menu.saveMermaid": "Save Mermaid diagrams as images",
 	"menu.convertWord": "Convert to Word (.docx)",
@@ -114,6 +119,11 @@ export const en = {
 	"warning.planChanged": "The file changed after the preview",
 	"warning.cacheFailed": "Could not use the image cache",
 	"warning.unsupportedSyntax": "Not converted yet; kept as Markdown text",
+	"warning.brokenLink": "A link points to a missing note or heading; kept as text",
+	"warning.embedCycle": "An embedded note embeds itself; kept as a link",
+	"warning.embedDepth": "Embedded notes are nested too deeply (more than 5 levels); kept as a link",
+	"warning.imageFailed": "Could not read an image",
+	"warning.unsupportedEmbed": "This embed is not converted yet; kept as text",
 } as const;
 
 export type MessageKey = keyof typeof en;

@@ -1,9 +1,9 @@
 // 書き出しの全体の流れ（01→02→03→（04・06・07）→09→10）。モードごとに、ドライランとノート 1 件の処理だけを差し替える。
 // - mermaid: Mermaid 画像として保存（R1 の単独保存・フェーズ 1）
-// - docx: Word に変換（フェーズ 2）
+// - docx: Word に変換（フェーズ 2。フェーズ 3a でリンク・埋め込み・画像などを足した）
 import { FileSystemAdapter, Notice, TFile, type App } from "obsidian";
 import * as nodePath from "path";
-import { exportDocxNote, planDocxNote, type PlannedOutput } from "../core/docx-export";
+import { exportDocxNote, planDocxNote, type PlannedOutput, type VaultEnvironment } from "../core/docx-export";
 import { applyResults } from "../core/manifest";
 import { exportMermaidNote, planMermaidNote, type MermaidExportDeps } from "../core/mermaid-export";
 import { runSequential } from "../core/run";
@@ -17,6 +17,7 @@ import { FsDiagramCache } from "./diagram-cache";
 import { FsOutputWriter, type OutputRoots } from "./fs-writer";
 import { ManifestStore } from "./manifest-store";
 import { createMermaidRenderer } from "./mermaid-renderer";
+import { createVaultEnvironment } from "./vault-env";
 import { ProgressNotice } from "./progress";
 import { showReport } from "./report-modal";
 
@@ -33,6 +34,10 @@ interface ModeContext {
 	settings: PluginSettings;
 	deps: MermaidExportDeps;
 	app: App;
+	/** リンクの解決・画像・色付け・frontmatter（フェーズ 3a） */
+	vault: VaultEnvironment;
+	/** 今回の実行の対象（確認画面で選んだノート）。内部リンクの変換対象の範囲（A-18） */
+	selected: ReadonlySet<string>;
 }
 
 /** モードごとの違い: 確認画面の題名、ドライラン、ノート 1 件の処理。 */
@@ -56,8 +61,8 @@ const MODES: Record<ExportMode, ModeDefinition> = {
 			if (settings.saveImageFiles) plans.push(...(await planMermaidNote(path, await deps.readNote(path), settings, deps.renderer.version, exists)));
 			return plans;
 		},
-		process: ({ settings, deps, app }, path, signal, manifest) =>
-			exportDocxNote(path, signal, settings, manifest, { ...deps, strictLineBreaks: readStrictLineBreaks(app) }),
+		process: ({ settings, deps, app, vault, selected }, path, signal, manifest) =>
+			exportDocxNote(path, signal, settings, manifest, { ...deps, strictLineBreaks: readStrictLineBreaks(app), vault, convertedNotes: selected }),
 	},
 };
 
@@ -123,7 +128,7 @@ export async function runExport(host: ExportHost, mode: ExportMode, source: Targ
 			if (!(file instanceof TFile)) throw new Error(`not found: ${path}`);
 			return app.vault.cachedRead(file);
 		};
-		const ctx: ModeContext = { settings, app, deps: { readNote, renderer, cache, writer } };
+		const ctx: ModeContext = { settings, app, deps: { readNote, renderer, cache, writer }, vault: await createVaultEnvironment(app), selected: new Set() };
 
 		// 02: 実行前の確認画面（ドライラン）
 		const outputLabel =
@@ -140,6 +145,7 @@ export async function runExport(host: ExportHost, mode: ExportMode, source: Targ
 			plan: (path) => definition.plan(ctx, path),
 		});
 		if (!selected || selected.length === 0) return;
+		ctx.selected = new Set(selected);
 
 		// 10: マニフェストは開始時に 1 回だけ読む（D4）
 		const { snapshot, warnings: loadWarnings } = await store.load();

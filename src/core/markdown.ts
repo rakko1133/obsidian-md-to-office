@@ -111,8 +111,8 @@ export function markTaskStates(tree: Root): void {
 	});
 }
 
-/** フェーズ 2 で .docx にしない記法（A-0b）。 */
-const UNSUPPORTED = new Set(["image", "imageReference", "html", "footnoteReference", "footnoteDefinition", "linkReference", "definition", "math", "inlineMath"]);
+/** .docx にしない記法（A-0b）。フェーズ 3a で画像・HTML・脚注・参照形式のリンクに対応した（obsidian-syntax.ts）。数式は 3b。 */
+const UNSUPPORTED = new Set(["imageReference", "linkReference", "definition", "math", "inlineMath"]);
 
 /** 未対応の記法に印を付け、種類ごとに 1 つ警告を出す（A-0b）。 */
 export function markUnsupported(tree: Root, ctx: TransformContext): void {
@@ -127,14 +127,16 @@ export function markUnsupported(tree: Root, ctx: TransformContext): void {
 	});
 }
 
-type AnyNode = Root | RootContent;
+export type AnyNode = Root | RootContent;
 
-function walk(node: AnyNode, visit: (node: RootContent) => void): void {
+/** 木を深さ優先で巡回する（親を先に訪れる）。 */
+export function walk(node: AnyNode, visit: (node: RootContent) => void): void {
 	if (node.type !== "root") visit(node);
 	if ("children" in node) for (const child of node.children as RootContent[]) walk(child, visit);
 }
 
-function walkParents(node: AnyNode, visit: (parent: Parent) => void): void {
+/** 子を持つノードを深さ優先で巡回する。visit の中で子を差し替えてよい（差し替えた後の子を巡回する）。 */
+export function walkParents(node: AnyNode, visit: (parent: Parent) => void): void {
 	if ("children" in node) {
 		visit(node as Parent);
 		for (const child of node.children as RootContent[]) walkParents(child, visit);

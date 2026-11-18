@@ -43,7 +43,12 @@ export type WarningCode =
 	| "manifestSaveFailed"
 	| "planChanged"
 	| "cacheFailed"
-	| "unsupportedSyntax";
+	| "unsupportedSyntax"
+	| "brokenLink"
+	| "embedCycle"
+	| "embedDepth"
+	| "imageFailed"
+	| "unsupportedEmbed";
 
 /** 予定動作（ドライラン: R3）。 */
 export type PlannedAction = "create" | "overwrite" | "unchanged" | "skip" | "rename";

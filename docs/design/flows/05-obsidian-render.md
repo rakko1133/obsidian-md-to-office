@@ -199,3 +199,8 @@ sequenceDiagram
 
 - D1: 処理中のノートを途中で打ち切るのはタイムアウト（既定 30 秒）のときだけ。中断ボタンでは処理中のノートの描画依頼は最後まで処理する。このため打ち切りの判定は「中断要求またはタイムアウト」ではなく「タイムアウト（`AbortSignal` が abort 済み）」だけにした
 - D2: 打ち切りの合図は `AbortSignal` に統一。`requestRender` の引数で `signal` を受け取り、依頼の受け付け時に `signal.aborted` を確かめ、完了待ちの最中は `abort` イベントで待ちをやめる。世代番号は使わない（旧「中断の合図の受け渡し」を解決）
+
+## 決定済み（2026-11-18・フェーズ 3a）
+
+- フェーズ 3a では `MarkdownRenderer.render()` による描画依頼は使わない。Obsidian に頼るのは、リンクの解決（`getFirstLinkpathDest`）・画像の読み込みと PNG 化（canvas）・コードのトークン化（`loadPrism()`）・frontmatter（`metadataCache`）だけで、どれも `src/obsidian/vault-env.ts` のホスト関数にした
+- 描画依頼（Dataview・他プラグインのコードブロック・数式）はフェーズ 3b で扱う。このフローの未決事項は 3b の準備で決める
