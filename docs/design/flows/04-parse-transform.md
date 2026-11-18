@@ -272,3 +272,16 @@ flowchart LR
 - Mermaid ノードと画像は連番で対応付ける（「Mermaid ノードと画像の対応付け」を解決）。連番はフェーズ 1 の取り出しと同じ順序
 - Wikilink・コールアウトを構文解析と変換のどちらで扱うかは、フェーズ 3 で決める
 - frontmatter は `remark-frontmatter` で本文から外す。値の読み取り（A-27）はフェーズ 3
+
+## 決定済み（2026-11-18・フェーズ 3a）
+
+詳細は `docs/requirements.md` の「フェーズ 3 の決定事項」。実装は `src/core/obsidian-syntax.ts`（独自の記法の変換）と `src/core/note-assembly.ts`（ノートの組み立て）。
+
+- Wikilink・コールアウト・ブロック ID・インライン脚注・インライン HTML は、変換の段で mdast の独自ノードにする（ユーザー決定。「Wikilink・コールアウトなどを構文解析と変換のどちらで扱うか」を解決）。表の中の `[[a\|b]]` は remark-gfm が `\|` を外してセルを分けないので、変換の段で扱える
+- コメント `%%…%%` は構文解析の前に文字列から除く。コードブロックとインラインコードの中は除かない。Word のコメントにするオプションでは、位置に印の文字を置き、変換の段で印をノードにする（「複数の段落にまたがる `%%コメント%%`」を解決）
+- ホスト関数は `NoteEnvironment`（`readNote`・`resolveLink`・`fileExists`・`isConverted`・`docxLink`・`vaultName`・`loadImage`・`highlight`）と、frontmatter を返す `frontmatter`（`metadataCache` を使う。YAML のライブラリは足さない）。案の `readText`・`isExportTarget`・`buildOpenUri` はこれに置き換えた（「ホスト関数の名前と範囲」「frontmatter の YAML の読み取り方法」を解決）
+- リンクの解決は、埋め込みを展開した後に木全体で行う。見出しとブロック ID の索引（ノートのパス + `#見出し` / `#^id`）にあればブックマークへのリンク、変換対象のノートなら .docx への相対リンク、対象外なら文字だけ、PDF などは `obsidian://open`。相対パスは 09 と同じ出力パスの計算（`docxOutputRef`）から作る（「リンク先の出力パスの計算をどこでするか」を解決: 04 の組み立ての段で計算し、07 には URL が付いたリンクが届く）
+- 画像のバイト列は Obsidian 側の `loadImage` が読み、WebP・GIF・BMP・AVIF は PNG にし、SVG には PNG の代替画像を付けてから、ノードの `data.image` に入れる（「画像のバイナリを誰が読むか」を解決）
+- 埋め込んだノートの見出しは元のレベルのまま（ユーザー決定）。深さの上限は 5 で固定。循環参照と深さの超過はリンクとして残して警告する
+- Excalidraw は `名前.excalidraw.svg`・`名前.svg`（と .png）を同じフォルダで探し、なければ原文を残して警告する。Canvas は原文を残して警告する
+- Mermaid の連番は、埋め込みを展開した後の木全体で振る。埋め込んだノートの図も .docx に入る（画像ファイルの保存（`saveImageFiles`）は、そのノート自身の図だけ）
