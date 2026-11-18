@@ -2,6 +2,7 @@
 import { Plugin, getLanguage } from "obsidian";
 import { normalizeSettings, type PluginSettings } from "./core/settings";
 import { setLocale } from "./i18n";
+import { registerCommands } from "./obsidian/commands";
 import { registerDevCommands } from "./obsidian/dev-commands";
 import { BatchOfficeExportSettingTab } from "./obsidian/settings-tab";
 
@@ -12,6 +13,7 @@ export default class BatchOfficeExportPlugin extends Plugin {
 		setLocale(getLanguage());
 		await this.loadSettings();
 		this.addSettingTab(new BatchOfficeExportSettingTab(this.app, this));
+		registerCommands(this);
 		if (__DEV__) registerDevCommands(this);
 	}
 
