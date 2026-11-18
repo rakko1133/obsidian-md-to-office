@@ -112,7 +112,7 @@ Obsidian を使う確認は自動化していない（G5）。テスト用 Vault
 - [x] 「元ノート」「見出し」の列: `--mode xlsx --path excel/01-types.md --set excelSourceColumns=true`。表の左に元ノート（リンク）と見出しの列
 - [x] Vault 全体の集計: `--mode summary --path ""`。`_export/test-vault_集計.xlsx` に目次・プロパティ（1 ノート 1 行、期日は日付型）・タスク（Vault 全体、期日は日付型、優先度は別の列、ノートはリンク）・Dataview（結果の表を「ノート名: クエリ」の表題付きで）
 - [x] 両方: `--mode both --path excel`。ノートごとの .docx と、フォルダごとの .xlsx の両方ができる
-- [ ] 確認画面の出力形式の選択（画面の確認。ドロップダウンで形式を変えると予定が変わる）
+- [x] 確認画面の出力形式の選択（2026-11-18 Claude が画面で確認）: 右クリック「Office 形式に変換…」で、出力形式の初期値（Word）が選ばれた確認画面が出る。「Word と Excel の両方」に変えると、題名が「Word と Excel に変換」になり、予定が .docx とブックの両方に計算し直される
 - [ ] 確認の後、`npm run build` の本番ビルドに戻して配置する
 
 ## フェーズ 4a の手動確認（完了条件 A）
