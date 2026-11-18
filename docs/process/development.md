@@ -15,7 +15,8 @@
 | `npm install` | 依存をインストールする |
 | `npm run dev` | 開発ビルドを作り、ソースの変更を監視して作り直す |
 | `npm run build:dev` | 開発ビルドを 1 回だけ作る。開発用のコマンドが入る |
-| `npm run build` | 型チェックのあと本番ビルドを作る（圧縮あり、開発用のコマンドなし）。`main.js` の大きさを表示する |
+| `npm run build` | 型チェックのあと本番ビルドを作る（圧縮あり、開発用のコマンドなし、末尾に同梱の依存のライセンス文）。`THIRD_PARTY_NOTICES.md` が古ければ止まる。`main.js` の大きさを表示する |
+| `npm run notices` | 本番ビルドに入る依存のライセンス文を `THIRD_PARTY_NOTICES.md` に書き直す。依存を足す・上げるたびに実行する（`npm run notices:check` は確かめるだけ） |
 | `npm run typecheck` | 型チェックだけをする |
 | `npm test` | Vitest の単体テストを実行する |
 | `npm run deploy:test-vault` | ビルド結果（`main.js`・`manifest.json`）をテスト用 Vault のプラグインフォルダにコピーする |
@@ -74,6 +75,28 @@ Obsidian の中でしか確かめられない処理（Mermaid・描画の取り�
 - 一部だけ: `python scripts/preview-export.py --only word3b`。倍率: `--zoom 1.5`。結果は `.preview/summary.json` にもあり、Claude Code に「一覧の結果を見て」と頼むと PNG を読んで確かめられる
 - `.preview/` は Git の管理対象外。基準画像はその PC のフォントで描くので、PC ごとに作る
 - LibreOffice は確認の対象外（未確認だが、開ける見込みという位置づけ。requirements.md の G5 の 2026-11-18 更新）
+
+## 公開とリリースの手順
+
+Obsidian のコミュニティプラグインは、`manifest.json` の `version` と同じ名前の GitHub Release から `main.js`・`manifest.json`・`styles.css` を取得する。リポジトリの公開・push・Release の作成・申請は外部に公開する操作なので、ユーザーの指示を受けてから行う。
+
+1. `manifest.json`・`package.json` の `version` と `versions.json` を上げて `release: x.y.z` をコミットし、`main` にマージして注釈付きタグ `x.y.z` を付ける（`git-rules.md` の 4 章）
+2. `npm run notices:check` と `npm test` が通ることを確かめ、`npm run build` で本番ビルドを作る
+3. `git push origin main x.y.z`
+4. `gh release create x.y.z main.js manifest.json styles.css --title x.y.z --notes "<変更点>"`（初回はリポジトリを公開に切り替えてから: `gh repo edit --visibility public --accept-visibility-change-consequences`）
+5. 作業が終わったら `npm run build:dev` と `npm run deploy:test-vault` で、テスト用 Vault を開発用ビルドに戻す（本番ビルドには開発用の自動実行が入っていない）
+
+初回だけ、コミュニティプラグインに申請する: `obsidianmd/obsidian-releases` をフォークし、`community-plugins.json` の末尾に次の項目を足して PR を出す。PR の本文はリポジトリの PR テンプレートのチェックリストに答える。
+
+```json
+{
+	"id": "batch-office-export",
+	"name": "Batch Office Export",
+	"author": "rakko1133",
+	"description": "Batch-convert notes to Word (.docx) and Excel (.xlsx), with Mermaid diagrams as images.",
+	"repo": "rakko1133/obsidian-md-to-office"
+}
+```
 
 ## フェーズ 0 の手動確認（完了条件 B1〜B4）
 

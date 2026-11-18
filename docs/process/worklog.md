@@ -8,6 +8,17 @@
 
 ---
 
+## 2026-11-18 フェーズ 6 の準備（公開の準備）
+
+- 決めたこと（Claude 推奨・requirements.md「フェーズ 6 の決定事項」）: ライセンスは MIT。UI の英語・日本語はフェーズ 0 から言語別のリソースで作ってあり（各 214 キー）、追加の作業はない。リポジトリの公開・Release・申請はユーザーの指示を受けてから
+- 作ったもの（`feat/release-prep`）: `README.md`（英語）・`README.ja.md`・`LICENSE`、同梱の依存のライセンス文をまとめる `scripts/third-party-notices.mjs` と `THIRD_PARTY_NOTICES.md`（77 パッケージ）。本番ビルドは main.js の末尾にも同じ文を入れる（3.23 MB → 3.38 MB）
+- 調べて分かったこと
+  - `docx` は `nanoid` などを、`exceljs` はブラウザ向けビルドに `jszip`・`dayjs` などを自分のビルドに埋め込んでいて、esbuild の metafile には出てこない。一覧に「embedded in」として足した
+  - `format`・`remark-math`・`saxes` はライセンスファイルを同梱していないので、package.json のライセンスの定型文で補った
+  - ID・名前は公式の一覧（10,551 件）と取り下げの一覧（175 件）に重複がない
+- 確認: 単体テスト 265 件。本番ビルドの main.js が構文として読める。開発用ビルドで Obsidian の変換が動く（自動実行）
+- 残り（ユーザーの指示を受けてから）: マージとタグ `1.0.0`、push、リポジトリの公開、GitHub Release の作成、`obsidianmd/obsidian-releases` への申請の PR
+
 ## 2026-11-18 フェーズ 5b 完了（タグ 0.5.1）
 
 - 完了条件 A〜C を確認した。A は開発用の自動実行で確かめた（画面は操作していない）。設定画面に足した 6 項目の見た目は確かめていない

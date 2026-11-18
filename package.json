@@ -1,20 +1,24 @@
 {
   "name": "batch-office-export",
-  "version": "0.5.1",
+  "version": "1.0.0",
   "description": "Batch-convert notes to Word (.docx) and Excel (.xlsx), with Mermaid diagrams as images.",
   "private": true,
-  "license": "UNLICENSED",
+  "license": "MIT",
+  "author": "rakko1133",
+  "repository": "github:rakko1133/obsidian-md-to-office",
   "main": "main.js",
   "scripts": {
     "dev": "node esbuild.config.mjs",
     "build:dev": "node esbuild.config.mjs once",
-    "build": "tsc --noEmit && node esbuild.config.mjs production",
+    "build": "tsc --noEmit && node scripts/third-party-notices.mjs --check && node esbuild.config.mjs production",
     "typecheck": "tsc --noEmit",
     "test": "vitest run",
     "deploy:test-vault": "node scripts/deploy-test-vault.mjs",
     "preview:export": "python scripts/preview-export.py",
     "preview:approve": "python scripts/preview-export.py --approve",
-    "obsidian:run": "node scripts/obsidian-run.mjs"
+    "obsidian:run": "node scripts/obsidian-run.mjs",
+    "notices": "node scripts/third-party-notices.mjs",
+    "notices:check": "node scripts/third-party-notices.mjs --check"
   },
   "dependencies": {
     "docx": "^9.15.4",
