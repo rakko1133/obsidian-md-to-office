@@ -70,6 +70,18 @@ export interface PluginSettings {
 	excelSourceColumns: boolean;
 	/** 確認画面の出力形式の初期値（R8） */
 	defaultFormat: "word" | "excel" | "both";
+	/** フッター中央のページ番号（C-5） */
+	footerPageNumber: boolean;
+	/** ヘッダーに文書のタイトル（C-5） */
+	headerTitle: boolean;
+	/** 内蔵の表紙（C-8） */
+	coverPage: boolean;
+	/** 目次（C-4a）: 入れない / 結合出力のときだけ / いつも */
+	tableOfContents: "never" | "combined" | "always";
+	/** 結合出力の章の並び順（C-8） */
+	combineOrder: "fileName" | "frontmatterOrder" | "moc";
+	/** 確認画面の「1 フォルダを 1 つの .docx にまとめる」の初期値（C-8） */
+	defaultCombine: boolean;
 }
 
 export const DEFAULT_SETTINGS: Readonly<PluginSettings> = {
@@ -108,6 +120,12 @@ export const DEFAULT_SETTINGS: Readonly<PluginSettings> = {
 	excelOutlineMode: false,
 	excelSourceColumns: false,
 	defaultFormat: "word",
+	footerPageNumber: true,
+	headerTitle: false,
+	coverPage: false,
+	tableOfContents: "combined",
+	combineOrder: "fileName",
+	defaultCombine: false,
 };
 
 /**
@@ -156,6 +174,12 @@ export function normalizeSettings(raw: unknown): PluginSettings {
 		excelOutlineMode: typeof data.excelOutlineMode === "boolean" ? data.excelOutlineMode : d.excelOutlineMode,
 		excelSourceColumns: typeof data.excelSourceColumns === "boolean" ? data.excelSourceColumns : d.excelSourceColumns,
 		defaultFormat: oneOf(data.defaultFormat, ["word", "excel", "both"], d.defaultFormat),
+		footerPageNumber: typeof data.footerPageNumber === "boolean" ? data.footerPageNumber : d.footerPageNumber,
+		headerTitle: typeof data.headerTitle === "boolean" ? data.headerTitle : d.headerTitle,
+		coverPage: typeof data.coverPage === "boolean" ? data.coverPage : d.coverPage,
+		tableOfContents: oneOf(data.tableOfContents, ["never", "combined", "always"], d.tableOfContents),
+		combineOrder: oneOf(data.combineOrder, ["fileName", "frontmatterOrder", "moc"], d.combineOrder),
+		defaultCombine: typeof data.defaultCombine === "boolean" ? data.defaultCombine : d.defaultCombine,
 	};
 }
 
