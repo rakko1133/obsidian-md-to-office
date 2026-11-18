@@ -19,6 +19,7 @@
   "dependencies": {
     "docx": "^9.15.4",
     "exceljs": "^4.4.0",
+    "fflate": "^0.8.3",
     "mathjax-full": "3.2.2",
     "picomatch": "^4.0.7",
     "remark-frontmatter": "^5.0.0",
