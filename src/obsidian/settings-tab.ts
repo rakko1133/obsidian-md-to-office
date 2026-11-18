@@ -155,7 +155,7 @@ export class BatchOfficeExportSettingTab extends PluginSettingTab {
 		for (const side of ["top", "bottom", "left", "right"] as const) {
 			margin.addText((text) => {
 				text.inputEl.type = "number";
-				text.inputEl.style.width = "4.5em";
+				text.inputEl.addClass("batch-office-export-margin-input");
 				text.setValue(String(s.marginsMm[side])).onChange(async (v) => save("marginsMm", { ...this.plugin.settings.marginsMm, [side]: Number(v) }));
 			});
 		}

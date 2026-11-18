@@ -51,7 +51,7 @@ interface BookGroup {
 }
 
 export interface XlsxRunDeps {
-	readNote(notePath: string): Promise<string>;
+	readNote: (notePath: string) => Promise<string>;
 	writer: OutputWriter;
 	vault?: VaultEnvironment;
 	labels: XlsxLabels;

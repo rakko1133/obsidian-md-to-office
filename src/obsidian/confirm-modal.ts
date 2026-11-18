@@ -219,7 +219,7 @@ class ConfirmModal extends Modal {
 				for (const p of plans) ul.createEl("li", { text: `${t(`action.${p.action}`)}: ${p.output.path}` });
 				if (plans.length === 0) details.hide();
 			}
-			await new Promise((r) => setTimeout(r, 0));
+			await new Promise((r) => window.setTimeout(r, 0));
 		}
 		this.updateTotals();
 	}

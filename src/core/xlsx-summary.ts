@@ -3,6 +3,7 @@
 import type { PhrasingContent, RootContent } from "mdast";
 import { writeWithConflictPolicy, type PlannedOutput, type VaultEnvironment } from "./docx-export";
 import type { OutputWriter } from "./mermaid-export";
+import { primitiveText } from "./frontmatter";
 import { obsidianOpenUri } from "./note-assembly";
 import { joinPath, noteBaseName, outputDirFor, plannedAction } from "./output-plan";
 import { aggregateStatus } from "./run";
@@ -63,10 +64,10 @@ export function extractTasks(markdown: string): TaskItem[] {
 	let fence: string | null = null;
 	let heading: string | undefined;
 	for (; i < lines.length; i++) {
-		const line = lines[i]!;
+		const line = lines[i];
 		const f = FENCE.exec(line);
 		if (fence !== null) {
-			if (f && f[1]![0] === fence[0] && f[1]!.length >= fence.length) fence = null;
+			if (f && f[1][0] === fence[0] && f[1].length >= fence.length) fence = null;
 			continue;
 		}
 		if (f) {
@@ -75,16 +76,16 @@ export function extractTasks(markdown: string): TaskItem[] {
 		}
 		const h = HEADING_LINE.exec(line);
 		if (h) {
-			heading = h[1]!.trim() || undefined;
+			heading = h[1].trim() || undefined;
 			continue;
 		}
 		const m = TASK_LINE.exec(line);
 		if (!m) continue;
-		const raw = m[2]!;
+		const raw = m[2];
 		const due = /📅️?\s*(\d{4}-\d{2}-\d{2})/u.exec(raw)?.[1];
 		const priority = PRIORITY_MARKS.findIndex((p) => raw.includes(p));
 		const text = raw.replace(DATE_FIELD, "").replace(RECURRENCE_FIELD, "").replace(ID_FIELD, "").replace(PRIORITY_FIELD, "").replace(BLOCK_ID, "").trim();
-		tasks.push({ mark: m[1]!, text, ...(due ? { due } : {}), ...(priority >= 0 ? { priority } : {}), ...(heading ? { heading } : {}) });
+		tasks.push({ mark: m[1], text, ...(due ? { due } : {}), ...(priority >= 0 ? { priority } : {}), ...(heading ? { heading } : {}) });
 	}
 	return tasks;
 }
@@ -94,16 +95,16 @@ export function dataviewBlocks(markdown: string): { lang: string; source: string
 	const blocks: { lang: string; source: string }[] = [];
 	const lines = markdown.split(/\r?\n/);
 	for (let i = 0; i < lines.length; i++) {
-		const open = /^\s*(`{3,}|~{3,})\s*([^\s`]*)/u.exec(lines[i]!);
+		const open = /^\s*(`{3,}|~{3,})\s*([^\s`]*)/u.exec(lines[i]);
 		if (!open) continue;
-		const fence = open[1]!;
-		const lang = open[2]!.toLowerCase();
+		const fence = open[1];
+		const lang = open[2].toLowerCase();
 		const body: string[] = [];
 		let j = i + 1;
 		for (; j < lines.length; j++) {
-			const close = FENCE.exec(lines[j]!);
-			if (close && close[1]![0] === fence[0] && close[1]!.length >= fence.length && lines[j]!.trim() === close[1]) break;
-			body.push(lines[j]!);
+			const close = FENCE.exec(lines[j]);
+			if (close && close[1][0] === fence[0] && close[1].length >= fence.length && lines[j].trim() === close[1]) break;
+			body.push(lines[j]);
 		}
 		if (lang === "dataview" || lang === "dataviewjs") blocks.push({ lang, source: body.join("\n") });
 		i = j;
@@ -117,7 +118,7 @@ export function frontmatterText(value: unknown): string {
 	if (Array.isArray(value)) return value.map(frontmatterText).filter((v) => v !== "").join(", ");
 	if (value instanceof Date) return value.toISOString().slice(0, 10);
 	if (typeof value === "object") return JSON.stringify(value);
-	return String(value);
+	return primitiveText(value);
 }
 
 /** 集計のブックの出力先（R8）: 出力ルートの直下（同一フォルダモードでは Vault の直下）に `{Vault 名}_集計.xlsx`。 */
@@ -132,7 +133,7 @@ export async function planSummary(settings: PluginSettings, vaultName: string, s
 }
 
 export interface SummaryRunDeps {
-	readNote(notePath: string): Promise<string>;
+	readNote: (notePath: string) => Promise<string>;
 	writer: OutputWriter;
 	vault?: VaultEnvironment;
 	labels: XlsxLabels;
@@ -225,7 +226,7 @@ export class SummaryRun {
 						text(status(t.mark)),
 						text(t.text),
 						text(t.due ?? ""),
-						text(t.priority !== undefined ? summary.priorities[t.priority]! : ""),
+						text(t.priority !== undefined ? summary.priorities[t.priority] : ""),
 						link(n.notePath),
 						text(t.heading ?? ""),
 					]),

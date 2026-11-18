@@ -17,13 +17,13 @@ export function registerDevCommands(plugin: BatchOfficeExportPlugin): void {
 	plugin.registerMarkdownCodeBlockProcessor("boe-test-svg", (source, el) => {
 		const label = source.trim() || "SVG";
 		const ns = "http://www.w3.org/2000/svg";
-		const svg = document.createElementNS(ns, "svg");
+		const svg = activeDocument.createElementNS(ns, "svg");
 		svg.setAttribute("width", "320");
 		svg.setAttribute("height", "120");
 		svg.setAttribute("viewBox", "0 0 320 120");
-		const rect = document.createElementNS(ns, "rect");
+		const rect = activeDocument.createElementNS(ns, "rect");
 		for (const [k, v] of Object.entries({ x: "4", y: "4", width: "312", height: "112", rx: "12", fill: "#dbeafe", stroke: "#1d4ed8", "stroke-width": "4" })) rect.setAttribute(k, v);
-		const text = document.createElementNS(ns, "text");
+		const text = activeDocument.createElementNS(ns, "text");
 		for (const [k, v] of Object.entries({ x: "160", y: "68", "text-anchor": "middle", "font-size": "24", fill: "#1e3a8a" })) text.setAttribute(k, v);
 		text.textContent = label;
 		svg.append(rect, text);

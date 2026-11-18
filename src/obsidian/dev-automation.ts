@@ -52,9 +52,8 @@ export function registerDevAutomation(plugin: BatchOfficeExportPlugin, pluginDir
 			const id = plugin.manifest.id;
 			const plugins = (plugin.app as unknown as { plugins: { disablePlugin(id: string): Promise<void>; enablePlugin(id: string): Promise<void> } }).plugins;
 			// 自分を無効にすると、このプラグインの interval は止まる。window の setTimeout は残るので、そこで有効に戻す
-			window.setTimeout(async () => {
-				await plugins.disablePlugin(id);
-				await plugins.enablePlugin(id);
+			window.setTimeout(() => {
+				void plugins.disablePlugin(id).then(() => plugins.enablePlugin(id));
 			}, 500);
 			buildMtime = 0;
 			return;

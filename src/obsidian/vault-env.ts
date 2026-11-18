@@ -14,7 +14,7 @@ import { createPluginRenderer } from "./plugin-render";
 const SVG_FALLBACK_SCALE = 2;
 
 export async function createVaultEnvironment(app: App): Promise<VaultEnvironment> {
-	const prism = await loadPrism().catch(() => null);
+	const prism = (await loadPrism().catch(() => null)) as PrismLike | null;
 	const plugins = createPluginRenderer(app);
 	const fileOf = (path: string): TFile => {
 		const file = app.vault.getAbstractFileByPath(path);
@@ -27,7 +27,7 @@ export async function createVaultEnvironment(app: App): Promise<VaultEnvironment
 		vaultName: app.vault.getName(),
 		frontmatter: (path) => {
 			const file = app.vault.getAbstractFileByPath(path);
-			return file instanceof TFile ? (app.metadataCache.getFileCache(file)?.frontmatter as Record<string, unknown> | undefined) : undefined;
+			return file instanceof TFile ? (app.metadataCache.getFileCache(file)?.frontmatter) : undefined;
 		},
 		loadImage: async (path) => loadImage(new Uint8Array(await app.vault.readBinary(fileOf(path))), fileOf(path).extension.toLowerCase()),
 		highlight: (code, lang) => (prism ? tokenize(prism, code, lang) : null),
@@ -76,7 +76,7 @@ async function decode(blob: Blob): Promise<HTMLImageElement> {
 }
 
 async function toPng(img: HTMLImageElement, width: number, height: number, whiteBackground: boolean): Promise<Uint8Array> {
-	const canvas = document.createElement("canvas");
+	const canvas = createEl("canvas");
 	canvas.width = Math.max(1, Math.ceil(width));
 	canvas.height = Math.max(1, Math.ceil(height));
 	const ctx = canvas.getContext("2d");
@@ -90,7 +90,7 @@ async function toPng(img: HTMLImageElement, width: number, height: number, white
 		try {
 			canvas.toBlob((b) => (b ? resolve(b) : reject(new Error("toBlob returned null"))), "image/png");
 		} catch (error) {
-			reject(error);
+			reject(error instanceof Error ? error : new Error(String(error)));
 		}
 	});
 	return new Uint8Array(await blob.arrayBuffer());
