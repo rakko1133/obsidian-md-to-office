@@ -1,7 +1,7 @@
 // .docx のレンダラ（07: .docx の生成・G2・G3・R5・R6）。mdast → docx ライブラリのオブジェクト → バイト列。
 // Obsidian API に依存しない。フェーズ 2 の範囲（見出し・段落・改行・リスト・タスク・表・文字書式・Mermaid・引用・コード・水平線・外部リンク）に、
 // フェーズ 3a の内部リンクとブックマーク・画像・コールアウト・コードの色付け・脚注・コメント・インライン HTML・改ページ・文書プロパティを足した。
-// それ以外の記法は元の Markdown を等幅で残す（A-0b）。
+// フェーズ 3b で数式（OMML: A-11）・外部の画像・コールアウトのテーマ色を足した。それ以外の記法は元の Markdown を等幅で残す（A-0b）。
 import {
 	AlignmentType,
 	Bookmark,
@@ -16,6 +16,7 @@ import {
 	ImageRun,
 	InternalHyperlink,
 	LevelFormat,
+	Math as DocxMath,
 	Packer,
 	PageBreak as DocxPageBreak,
 	PageOrientation,
@@ -32,9 +33,10 @@ import {
 	type IParagraphOptions,
 	type ParagraphChild,
 } from "docx";
+import { latexToMath } from "docx/math";
 import type { BlockContent, Code, FootnoteDefinition, Heading, List, ListItem, PhrasingContent, Root, RootContent, Table as MdTable } from "mdast";
 import { walk } from "./markdown";
-import type { Callout, CodeToken, EmbedImage } from "./obsidian-syntax";
+import type { Callout, CodeToken, EmbedImage, ImageAsset } from "./obsidian-syntax";
 
 export interface DiagramAsset {
 	svg: Uint8Array;
@@ -323,6 +325,9 @@ class Renderer {
 				return [new Paragraph({ border: { bottom: { style: BorderStyle.SINGLE, size: 6, color: "auto", space: 1 } }, children: [] })];
 			case "pageBreak":
 				return [new Paragraph({ children: [new DocxPageBreak()] })];
+			case "math":
+				// ブロックの数式は中央に置いた数式だけの段落（Word が独立した数式として扱う）
+				return [new Paragraph({ alignment: AlignmentType.CENTER, children: this.math(node.value, node.data?.image, true) })];
 			default:
 				return [this.original(node)];
 		}
@@ -355,7 +360,7 @@ class Renderer {
 
 	/** コールアウト（A-6）: 1 行 1 列の表。左の罫線を種類の色、背景を淡い色にし、先頭に種類名とタイトルを置く。 */
 	private callout(node: Callout, headingShift: number): Table {
-		const color = calloutColor(node.calloutType);
+		const color = node.data?.calloutColor ?? calloutColor(node.calloutType);
 		const title = new Paragraph({ spacing: { after: 60 }, children: this.inlines(node.title, { bold: true, color }) });
 		const body = this.blocks(node.children as RootContent[], headingShift);
 		// セルの最後は段落でなければならない
@@ -509,9 +514,20 @@ class Renderer {
 		});
 	}
 
-	/** 埋め込む画像（A-20）。読み込めなかった画像は元の記法を等幅で残す。 */
+	/** 数式（A-11）: Word の数式（OMML）。変換できなかった式は画像、画像もなければ LaTeX の原文を等幅で残す。 */
+	private math(latex: string, image: ImageAsset | undefined, display: boolean): ParagraphChild[] {
+		if (image) return [this.image({ type: "embedImage", path: "", alt: latex, data: { image } })];
+		try {
+			return [new DocxMath({ children: latexToMath(latex) })];
+		} catch {
+			return [this.run(display ? `$$${latex}$$` : `$${latex}$`, { code: true })];
+		}
+	}
+
+	/** 埋め込む画像（A-20）。読み込めなかった画像は元の記法を等幅で残す。外部の画像はリンクにする。 */
 	private image(node: EmbedImage): ParagraphChild {
 		const asset = node.data?.image;
+		if (!asset && node.url) return new ExternalHyperlink({ link: node.url, children: [this.run(node.alt || node.url, { link: true })] });
 		if (!asset || (asset.type === "svg" && !asset.fallback)) return this.run(`![[${node.path}]]`, { code: true });
 		const transformation = imageSize(node, asset, this.area);
 		const altText = { name: node.alt, description: node.alt, title: node.alt };
@@ -581,6 +597,8 @@ class Renderer {
 				return this.inlines(node.children, format);
 			case "embedImage":
 				return [this.image(node)];
+			case "inlineMath":
+				return this.math(node.value, node.data?.image, false);
 			case "footnoteReference": {
 				const def = this.footnoteDefs.get(node.identifier);
 				if (!def) return [this.run(`[^${node.label ?? node.identifier}]`, format)];

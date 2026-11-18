@@ -54,6 +54,10 @@ export interface PluginSettings {
 	keepCommentsAsWordComments: boolean;
 	/** 冒頭に frontmatter のプロパティの表を出す（A-27） */
 	frontmatterTable: boolean;
+	/** 外部の画像をダウンロードして埋め込む（A-20） */
+	downloadExternalImages: boolean;
+	/** コールアウトの色: 既定色の固定の表 / テーマの色（A-6） */
+	calloutColorSource: "fixed" | "theme";
 }
 
 export const DEFAULT_SETTINGS: Readonly<PluginSettings> = {
@@ -84,6 +88,8 @@ export const DEFAULT_SETTINGS: Readonly<PluginSettings> = {
 	codeLineNumbers: false,
 	keepCommentsAsWordComments: false,
 	frontmatterTable: false,
+	downloadExternalImages: false,
+	calloutColorSource: "fixed",
 };
 
 /**
@@ -124,6 +130,8 @@ export function normalizeSettings(raw: unknown): PluginSettings {
 		codeLineNumbers: bool(data.codeLineNumbers, d.codeLineNumbers),
 		keepCommentsAsWordComments: bool(data.keepCommentsAsWordComments, d.keepCommentsAsWordComments),
 		frontmatterTable: bool(data.frontmatterTable, d.frontmatterTable),
+		downloadExternalImages: bool(data.downloadExternalImages, d.downloadExternalImages),
+		calloutColorSource: oneOf(data.calloutColorSource, ["fixed", "theme"], d.calloutColorSource),
 	};
 }
 

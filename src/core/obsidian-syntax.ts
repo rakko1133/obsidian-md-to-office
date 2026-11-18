@@ -67,8 +67,10 @@ export interface InternalLink extends Parent {
 /** 埋め込む画像（A-20）。画像のデータは note-assembly.ts が data.image に入れる。 */
 export interface EmbedImage {
 	type: "embedImage";
-	/** Vault の中のパス */
+	/** Vault の中のパス（外部の画像や描画結果の画像では空） */
 	path: string;
+	/** 外部の画像の URL（A-20 のオプション: ダウンロードして埋め込む） */
+	url?: string;
 	alt: string;
 	width?: number;
 	height?: number;
@@ -129,6 +131,8 @@ declare module "mdast" {
 		tokens?: CodeToken[];
 		/** 埋め込む画像のデータ */
 		image?: ImageAsset;
+		/** テーマから読んだコールアウトの色（A-6 のオプション） */
+		calloutColor?: string;
 	}
 }
 
@@ -193,7 +197,7 @@ export function wikiDisplay(link: Pick<WikiLink, "target" | "subpath" | "alias">
 }
 
 /** Vault の中を指す Markdown のリンク `[x](note.md#見出し)` と画像 `![alt|300](pic.png)` を wikiLink にする。外部 URL の画像はリンクにする（A-20）。 */
-export function convertMarkdownLinks(tree: Root): void {
+export function convertMarkdownLinks(tree: Root, options: { downloadExternalImages: boolean } = { downloadExternalImages: false }): void {
 	walkParents(tree, (parent) => {
 		parent.children = (parent.children as RootContent[]).map((child) => {
 			if (child.type === "link" && !hasScheme(child.url)) {
@@ -201,6 +205,16 @@ export function convertMarkdownLinks(tree: Root): void {
 				return { type: "wikiLink", target, subpath, embed: false, raw: `[${plainText(child.children)}](${child.url})`, children: child.children, position: child.position } satisfies WikiLink;
 			}
 			if (child.type === "image") {
+				if (hasScheme(child.url) && options.downloadExternalImages && /^https?:/i.test(child.url)) {
+					const alt = child.alt?.split("|")[0] || child.url;
+					const size = /\|\s*(\d+)(?:\s*x\s*(\d+))?\s*$/.exec(child.alt ?? "");
+					const image: EmbedImage = { type: "embedImage", path: "", url: child.url, alt, position: child.position };
+					if (size) {
+						image.width = Number(size[1]);
+						if (size[2] !== undefined) image.height = Number(size[2]);
+					}
+					return image;
+				}
 				if (hasScheme(child.url)) {
 					const label = child.alt?.split("|")[0] || child.url;
 					return { type: "link", url: child.url, title: null, children: [{ type: "text", value: label }], position: child.position };

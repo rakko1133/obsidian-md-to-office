@@ -114,13 +114,16 @@ export async function exportDocxNote(
 	const vault = deps.vault ?? EMPTY_VAULT;
 	const ownOutput = docxOutputRef(notePath, settings);
 	const converted = convertedNotes(deps.convertedNotes, manifest);
+	const { calloutColor, ...rest } = vault;
 	const env: NoteEnvironment = {
-		...vault,
+		...rest,
+		// テーマの色はオプションのときだけ読む（A-6）
+		...(settings.calloutColorSource === "theme" && calloutColor ? { calloutColor } : {}),
 		readNote: deps.readNote,
 		isConverted: (path) => converted.has(path),
 		docxLink: (target) => relativeUrl(ownOutput, docxOutputRef(target, settings)),
 	};
-	const assembled = await assembleNote(notePath, env, { keepComments: settings.keepCommentsAsWordComments });
+	const assembled = await assembleNote(notePath, env, { keepComments: settings.keepCommentsAsWordComments, downloadExternalImages: settings.downloadExternalImages, signal });
 	const { tree } = assembled;
 	warnings.push(...assembled.warnings);
 	const fm = mapFrontmatter(vault.frontmatter?.(notePath));

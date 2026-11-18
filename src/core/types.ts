@@ -48,7 +48,11 @@ export type WarningCode =
 	| "embedCycle"
 	| "embedDepth"
 	| "imageFailed"
-	| "unsupportedEmbed";
+	| "unsupportedEmbed"
+	| "pluginMissing"
+	| "renderFailed"
+	| "mathAsImage"
+	| "mathFailed";
 
 /** 予定動作（ドライラン: R3）。 */
 export type PlannedAction = "create" | "overwrite" | "unchanged" | "skip" | "rename";
