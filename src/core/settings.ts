@@ -58,6 +58,12 @@ export interface PluginSettings {
 	downloadExternalImages: boolean;
 	/** コールアウトの色: 既定色の固定の表 / テーマの色（A-6） */
 	calloutColorSource: "fixed" | "theme";
+	/** Excel のブックの単位（R8）: 1 フォルダ = 1 ブック / 1 ノート = 1 ブック。1 件だけの変換は常に {ノート名}.xlsx */
+	excelBookUnit: "perFolder" | "perNote";
+	/** シートの単位（A-31・D-1）: 1 ノート = 1 シート / 1 表 = 1 シート */
+	excelSheetUnit: "perNote" | "perTable";
+	/** 各表を Excel テーブルにする（D-3） */
+	excelAsTable: boolean;
 }
 
 export const DEFAULT_SETTINGS: Readonly<PluginSettings> = {
@@ -90,6 +96,9 @@ export const DEFAULT_SETTINGS: Readonly<PluginSettings> = {
 	frontmatterTable: false,
 	downloadExternalImages: false,
 	calloutColorSource: "fixed",
+	excelBookUnit: "perFolder",
+	excelSheetUnit: "perNote",
+	excelAsTable: true,
 };
 
 /**
@@ -132,6 +141,9 @@ export function normalizeSettings(raw: unknown): PluginSettings {
 		frontmatterTable: bool(data.frontmatterTable, d.frontmatterTable),
 		downloadExternalImages: bool(data.downloadExternalImages, d.downloadExternalImages),
 		calloutColorSource: oneOf(data.calloutColorSource, ["fixed", "theme"], d.calloutColorSource),
+		excelBookUnit: oneOf(data.excelBookUnit, ["perFolder", "perNote"], d.excelBookUnit),
+		excelSheetUnit: oneOf(data.excelSheetUnit, ["perNote", "perTable"], d.excelSheetUnit),
+		excelAsTable: typeof data.excelAsTable === "boolean" ? data.excelAsTable : d.excelAsTable,
 	};
 }
 
