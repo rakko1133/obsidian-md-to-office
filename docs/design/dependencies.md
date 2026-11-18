@@ -48,6 +48,9 @@ G1 の条件: 配布物に含めるライブラリは、再配布できるライ
 | `@types/node` | 22.x | MIT | Node.js の型定義 |
 | `tslib` | 2.9.1 | 0BSD | TypeScript の補助関数 |
 | `jszip` | 3.10.2 | (MIT OR GPL-3.0-or-later) | テストで .docx / .xlsx を展開して中身を確かめる |
+| `eslint` | 9.39.5 | MIT | 静的解析（`npm run lint`）。10.x は公式プラグインの一部の依存が対応を宣言していないため 9.x にした（ユーザー承認・2026-11-18） |
+| `eslint-plugin-obsidianmd` | 0.6.0 | MIT | Obsidian 公式の規則（コミュニティプラグインの自動レビューと同じ観点）。推奨設定を使う |
+| `typescript-eslint` | 8.73.0 | MIT | TypeScript の構文解析と型情報を使う規則（公式プラグインの必須の依存） |
 
 変換結果の一覧ページ（`scripts/preview-export.py`）が使う Python のパッケージ。npm の依存ではなく、使う人が各自で入れる。配布物にもリポジトリにも含めない。
 
