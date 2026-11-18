@@ -3,15 +3,19 @@
 // - 画像: Vault からバイト列を読み、Word が扱えない形式（WebP・GIF・BMP・AVIF）は canvas で PNG にする。SVG には PNG の代替画像を付ける（A-20）
 // - コードの色付け: Obsidian 同梱の Prism（loadPrism）でトークンに分ける（A-7）
 // - frontmatter: metadataCache のキャッシュ（A-27）
+// - フェーズ 3b の描画依頼などは plugin-render.ts
 import { TFile, loadPrism, type App } from "obsidian";
 import { svgSize, type VaultEnvironment } from "../core/docx-export";
+import { resolveCssVariables } from "../core/svg-css";
 import type { CodeToken, ImageAsset } from "../core/obsidian-syntax";
+import { createPluginRenderer } from "./plugin-render";
 
 /** SVG の PNG の代替画像の倍率（96 dpi の 2 倍 = 192 dpi。Mermaid の既定と同じ）。 */
 const SVG_FALLBACK_SCALE = 2;
 
 export async function createVaultEnvironment(app: App): Promise<VaultEnvironment> {
 	const prism = await loadPrism().catch(() => null);
+	const plugins = createPluginRenderer(app);
 	const fileOf = (path: string): TFile => {
 		const file = app.vault.getAbstractFileByPath(path);
 		if (!(file instanceof TFile)) throw new Error(`not found: ${path}`);
@@ -27,12 +31,21 @@ export async function createVaultEnvironment(app: App): Promise<VaultEnvironment
 		},
 		loadImage: async (path) => loadImage(new Uint8Array(await app.vault.readBinary(fileOf(path))), fileOf(path).extension.toLowerCase()),
 		highlight: (code, lang) => (prism ? tokenize(prism, code, lang) : null),
+		// フェーズ 3b: 他のプラグインの描画・数式の画像・外部の画像・テーマのコールアウトの色
+		renderableLanguage: plugins.renderableLanguage,
+		renderBlock: plugins.renderBlock,
+		renderMath: plugins.renderMath,
+		fetchImage: plugins.fetchImage,
+		calloutColor: plugins.calloutColor,
 	};
 }
 
-async function loadImage(bytes: Uint8Array, ext: string): Promise<ImageAsset> {
+/** 画像のバイト列を、Word が扱える形式にする（描画結果・外部の画像でも使う）。 */
+export async function loadImage(bytes: Uint8Array, ext: string): Promise<ImageAsset> {
 	if (ext === "svg") {
-		const text = new TextDecoder().decode(bytes);
+		// Word は CSS 変数を解釈しないので、実際の値に置き換える（他のプラグインの描画結果の SVG など）
+		const text = resolveCssVariables(new TextDecoder().decode(bytes));
+		bytes = new TextEncoder().encode(text);
 		const img = await decode(new Blob([bytes as BlobPart], { type: "image/svg+xml" }));
 		const fromAttr = svgSize(text);
 		const width = img.naturalWidth || fromAttr.width;

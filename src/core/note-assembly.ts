@@ -1,6 +1,9 @@
 // ノート 1 件の木を組み立てる（04 → 05 → 07 の間・フェーズ 3a）。
 // 構文解析 → Obsidian 独自の記法の変換 → ノートの埋め込みの展開（A-21）→ Mermaid の連番 → リンクの解決（A-18・A-19・A-22）
-// → 画像とコードの色付けの準備（A-20・A-7）。Obsidian API に依存しない。Vault の読み書きは NoteEnvironment に任せる。
+// → 画像とコードの色付けの準備（A-20・A-7）。フェーズ 3b で、他のプラグインの描画依頼（A-24・A-26）・数式（A-11）・
+// 外部の画像のダウンロード・コールアウトのテーマ色（A-6）を足した。Obsidian API に依存しない。Vault の読み書きは NoteEnvironment に任せる。
+import { latexToMath } from "docx/math";
+import type { InlineMath, Math as MdMath } from "mdast-util-math";
 import type { Code, List, ListItem, Paragraph, Parent, PhrasingContent, Root, RootContent } from "mdast";
 import { COMMENT_MARK, stripComments } from "./comments";
 import { markHighlight, markMermaid, markTaskStates, markUnsupported, parseMarkdown, walk } from "./markdown";
@@ -44,11 +47,28 @@ export interface NoteEnvironment {
 	loadImage?(path: string): Promise<ImageAsset>;
 	/** コードをトークンに分ける（A-7）。言語が分からなければ null */
 	highlight?(code: string, lang: string): CodeToken[] | null;
+	/** Obsidian に描画を頼む言語か（コードブロックの処理が登録されているか: A-24・A-26） */
+	renderableLanguage?(lang: string): boolean;
+	/** コードブロックを Obsidian に描画させ、結果を mdast にする。描画できなければ null（理由は Error で投げてもよい） */
+	renderBlock?(lang: string, source: string, sourcePath: string, signal?: AbortSignal): Promise<RootContent[] | null>;
+	/** latexToMath で変換できない数式を画像にする（MathJax の SVG + PNG: A-11） */
+	renderMath?(latex: string, display: boolean): Promise<ImageAsset>;
+	/** 外部の画像を取得する（A-20 のオプション）。なければリンクのまま */
+	fetchImage?(url: string): Promise<ImageAsset>;
+	/** テーマのコールアウトの色（16 進 6 桁）。読めなければ undefined（A-6 のオプション） */
+	calloutColor?(type: string): string | undefined;
 }
+
+/** Dataview の言語（Dataview が入っていなければ警告する）。 */
+const DATAVIEW_LANGUAGES = new Set(["dataview", "dataviewjs"]);
 
 export interface AssembleOptions {
 	/** `%%…%%` を Word のコメントとして残す（A-16 のオプション） */
 	keepComments: boolean;
+	/** 外部の画像を取得して埋め込む（A-20 のオプション） */
+	downloadExternalImages?: boolean;
+	/** ノートのタイムアウト（描画の待ちを打ち切る: D1・D2） */
+	signal?: AbortSignal;
 }
 
 export interface AssembledNote {
@@ -72,6 +92,7 @@ export async function assembleNote(rootPath: string, env: NoteEnvironment, optio
 	const state: State = { env, options, warnings: [], comments: [], noteCount: 0 };
 	const { tree, source } = await loadNote(rootPath, state);
 	await expandEmbeds(tree, rootPath, state, [rootPath], 0);
+	await renderPluginBlocks(tree, rootPath, state);
 	markMermaid(tree);
 	resolveLinks(tree, rootPath, state);
 	await prepareAssets(tree, state);
@@ -93,7 +114,7 @@ async function loadNote(path: string, state: State): Promise<{ tree: Root; sourc
 		splitCommentMarks(tree, offset);
 	}
 	markWikiLinks(tree);
-	convertMarkdownLinks(tree);
+	convertMarkdownLinks(tree, { downloadExternalImages: state.options.downloadExternalImages ?? false });
 	markBlockIds(tree, path);
 	markHeadingSources(tree, path);
 	markCallouts(tree);
@@ -105,7 +126,7 @@ async function loadNote(path: string, state: State): Promise<{ tree: Root; sourc
 	markUnsupported(tree, ctx);
 
 	walkAll(tree, (node) => {
-		if (node.type === "wikiLink") node.data = { ...node.data, sourcePath: path };
+		if (node.type === "wikiLink" || node.type === "code") node.data = { ...node.data, sourcePath: path };
 		if (node.data?.unsupported && node.position?.start.offset !== undefined && node.position.end.offset !== undefined) {
 			node.data.original = text.slice(node.position.start.offset, node.position.end.offset);
 		}
@@ -344,6 +365,58 @@ export function extractSection(tree: Root, subpath: string): RootContent[] | nul
 }
 
 // ---------------------------------------------------------------------------
+// 他のプラグインの描画（A-24・A-26・フェーズ 3b）
+
+/** コードブロックを、Obsidian に描画させた結果に置き換える。描画できなければ原文のまま残して警告する。 */
+async function renderPluginBlocks(tree: Root, rootPath: string, state: State): Promise<void> {
+	const { env } = state;
+	const visit = async (parent: Parent): Promise<void> => {
+		const next: RootContent[] = [];
+		for (const child of parent.children as RootContent[]) {
+			if (child.type !== "code" || !child.lang) {
+				if ("children" in child) await visit(child as Parent);
+				next.push(child);
+				continue;
+			}
+			const lang = child.lang.toLowerCase();
+			if (lang === "mermaid") {
+				next.push(child);
+				continue;
+			}
+			const renderable = env.renderableLanguage?.(lang) ?? false;
+			if (!renderable || !env.renderBlock) {
+				if (DATAVIEW_LANGUAGES.has(lang)) state.warnings.push({ code: "pluginMissing", detail: lang });
+				next.push(child);
+				continue;
+			}
+			const source = child.data?.sourcePath ?? rootPath;
+			let nodes: RootContent[] | null = null;
+			let reason = "empty";
+			try {
+				nodes = await env.renderBlock(lang, child.value, source, state.options.signal);
+			} catch (error) {
+				if (state.options.signal?.aborted) throw error;
+				reason = error instanceof Error ? error.message : String(error);
+			}
+			if (!nodes || nodes.length === 0) {
+				state.warnings.push({ code: "renderFailed", detail: `${lang}: ${reason}` });
+				next.push(child);
+				continue;
+			}
+			// 取り込んだ内部リンクは、そのコードブロックがあったノートから解決する
+			for (const node of nodes) {
+				walkAll(node, (n) => {
+					if (n.type === "wikiLink") n.data = { ...n.data, sourcePath: source };
+				});
+			}
+			next.push(...nodes);
+		}
+		parent.children = next as Parent["children"];
+	};
+	await visit(tree);
+}
+
+// ---------------------------------------------------------------------------
 // リンクの解決（A-18・A-19・A-22）
 
 function resolveLinks(tree: Root, rootPath: string, state: State): void {
@@ -418,17 +491,45 @@ class BookmarkNames {
 async function prepareAssets(tree: Root, state: State): Promise<void> {
 	const images: EmbedImage[] = [];
 	const codes: Code[] = [];
+	const maths: (MdMath | InlineMath)[] = [];
+	const { env } = state;
 	walkAll(tree, (node) => {
-		if (node.type === "embedImage") images.push(node);
+		// 描画結果から取り込んだ画像は、すでにデータを持っている
+		if (node.type === "embedImage" && !node.data?.image) images.push(node);
 		if (node.type === "code" && node.lang && node.data?.mermaidIndex === undefined) codes.push(node);
+		if (node.type === "math" || node.type === "inlineMath") maths.push(node);
+		if (node.type === "callout" && env.calloutColor) {
+			const color = env.calloutColor(node.calloutType);
+			if (color) node.data = { ...node.data, calloutColor: color };
+		}
 	});
-	if (state.env.loadImage) {
-		for (const node of images) {
-			try {
-				node.data = { ...node.data, image: await state.env.loadImage(node.path) };
-			} catch (error) {
-				state.warnings.push({ code: "imageFailed", detail: `${node.path}: ${error instanceof Error ? error.message : String(error)}` });
+	for (const node of images) {
+		const load = node.url ? env.fetchImage?.bind(env, node.url) : env.loadImage?.bind(env, node.path);
+		if (!load) continue;
+		try {
+			node.data = { ...node.data, image: await load() };
+		} catch (error) {
+			state.warnings.push({ code: "imageFailed", detail: `${node.url ?? node.path}: ${error instanceof Error ? error.message : String(error)}` });
+		}
+	}
+	// 数式（A-11）: latexToMath で変換できない式は、MathJax の画像にする
+	for (const node of maths) {
+		try {
+			latexToMath(node.value);
+			continue;
+		} catch (error) {
+			const reason = error instanceof Error ? error.message : String(error);
+			if (env.renderMath) {
+				try {
+					node.data = { ...node.data, image: await env.renderMath(node.value, node.type === "math") };
+					state.warnings.push({ code: "mathAsImage", detail: `${node.value}: ${reason}` });
+					continue;
+				} catch {
+					// 下の原文に回す
+				}
 			}
+			node.data = { ...node.data, unsupported: true };
+			state.warnings.push({ code: "mathFailed", detail: `${node.value}: ${reason}` });
 		}
 	}
 	if (state.env.highlight) {

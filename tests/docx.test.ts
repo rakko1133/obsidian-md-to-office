@@ -13,7 +13,7 @@ import type { Warning } from "../src/core/types";
 
 // D: テスト用 Vault の word/ と word3a/ のサンプルを .docx にして、word/document.xml をスナップショットで比べる（G5）
 const VAULT_DIR = "test-vault";
-const SAMPLE_DIRS = ["word", "word3a"];
+const SAMPLE_DIRS = ["word", "word3a", "word3b"];
 const PNG_1x1 = Uint8Array.from(
 	atob("iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAIAAACQd1PeAAAADElEQVR4nGP4//8/AAX+Av4N70a4AAAAAElFTkSuQmCC"),
 	(ch) => ch.charCodeAt(0),
@@ -92,6 +92,33 @@ const fakeVault: VaultEnvironment = {
 		return { type: ext === "jpg" ? "jpg" : "png", data: PNG_1x1, width: large ? 1600 : 640, height: large ? 900 : 400 };
 	},
 	highlight: fakeHighlight,
+	// フェーズ 3b: Dataview とテスト用の処理だけを「描画できる」とし、決まった結果を返す。dataviewjs は時間切れにする
+	renderableLanguage: (lang) => ["dataview", "dataviewjs", "boe-test-svg", "boe-test-canvas"].includes(lang),
+	renderBlock: async (lang, source) => {
+		if (lang === "dataviewjs") throw new Error("timeout (10 s)");
+		if (lang.startsWith("boe-test")) return [{ type: "paragraph", children: [{ type: "embedImage", path: "", alt: lang, data: { image: { type: "png", data: PNG_1x1, width: 300, height: 100 } } }] }];
+		if (source.trim().startsWith("TABLE")) {
+			return [
+				{
+					type: "table",
+					align: [null, null],
+					children: [
+						{ type: "tableRow", children: [{ type: "tableCell", children: [{ type: "text", value: "File" }] }, { type: "tableCell", children: [{ type: "text", value: "status" }] }] },
+						{ type: "tableRow", children: [{ type: "tableCell", children: [{ type: "wikiLink", target: "data/データ A.md", subpath: "", embed: false, raw: "", children: [{ type: "text", value: "データ A" }] }] }, { type: "tableCell", children: [{ type: "text", value: "draft" }] }] },
+					],
+				},
+			];
+		}
+		return [{ type: "list", ordered: false, spread: false, children: [{ type: "listItem", spread: false, checked: source.includes("TASK") ? false : null, children: [{ type: "paragraph", children: [{ type: "text", value: "項目" }] }] }] }];
+	},
+	renderMath: async (latex) => {
+		if (latex.includes("undefinedcommand")) throw new Error("MathJax could not read the formula");
+		return { type: "svg", data: svgOf(80, 20), fallback: PNG_1x1, width: 80, height: 20 };
+	},
+	fetchImage: async (url) => {
+		if (url.includes("no-such")) throw new Error("HTTP 404");
+		return { type: "png", data: PNG_1x1, width: 200, height: 100 };
+	},
 	frontmatter: (path) =>
 		path.endsWith("08-frontmatter.md") ? { title: "frontmatter のタイトル", author: "山田 太郎", tags: ["sample", "phase3a"], created: "2026-11-18T09:30:00Z", status: "draft" } : undefined,
 };
@@ -102,7 +129,13 @@ interface Converted {
 }
 
 /** ノートを組み立てて .docx にする。path を指定しないときは、Vault に存在しないノート test.md として変換する。 */
-async function convertNote(markdown: string, overrides: Partial<DocxRenderOptions> = {}, path = "test.md", options = { keepComments: false }): Promise<Converted> {
+async function convertNote(
+	markdown: string,
+	overrides: Partial<DocxRenderOptions> = {},
+	path = "test.md",
+	options: { keepComments: boolean; downloadExternalImages?: boolean } = { keepComments: false },
+	extra: Partial<NoteEnvironment> = {},
+): Promise<Converted> {
 	const folder = path.slice(0, path.lastIndexOf("/") + 1);
 	const env: NoteEnvironment = {
 		...fakeVault,
@@ -110,6 +143,7 @@ async function convertNote(markdown: string, overrides: Partial<DocxRenderOption
 		// 同じフォルダ（とその下）のノートを変換対象とみなす
 		isConverted: (p) => folder !== "" && p.startsWith(folder),
 		docxLink: (target) => relativeUrl(docxOutputRef(path, DEFAULT_SETTINGS), docxOutputRef(target, DEFAULT_SETTINGS)),
+		...extra,
 	};
 	const assembled = await assembleNote(path, env, options);
 	const zip = await JSZip.loadAsync(
@@ -425,8 +459,10 @@ describe("フェーズ 3a の要素", () => {
 	it("脚注とインライン脚注は Word の脚注（A-10）", async () => {
 		const zip = await convert("a[^1] b^[インライン] c[^1]\n\n[^1]: 定義");
 		const d = await doc(zip);
-		expect(d.match(/<w:footnoteReference w:id="1"\/>/g)).toHaveLength(2);
+		// 同じ脚注の 2 回目の参照は w:footnoteReference を重ねず（Word が開けなくなる）、同じ番号の上付き文字にする
+		expect(d.match(/<w:footnoteReference w:id="1"\/>/g)).toHaveLength(1);
 		expect(d).toContain('<w:footnoteReference w:id="2"/>');
+		expect(d).toMatch(/<w:rStyle w:val="FootnoteReference"\/>(?:(?!<\/w:r>).)*<w:vertAlign w:val="superscript"\/>(?:(?!<\/w:r>).)*<w:t[^>]*>1<\/w:t>/);
 		const notes = await xml(zip, "word/footnotes.xml");
 		expect(notes).toContain(">定義<");
 		expect(notes).toContain(">インライン<");
@@ -487,5 +523,62 @@ describe("フェーズ 3a の要素", () => {
 		expect(relativeUrl({ location: "vault", path: "x.docx" }, { location: "external", path: "y.docx" })).toBeNull();
 		const manifest = { entries: [{ output: { location: "vault" as const, path: "_export/p.docx" }, sources: ["p.md"], kind: "docx" as const, contentHash: "h", writtenAt: "t" }] };
 		expect([...convertedNotes(new Set(["a.md"]), manifest)].sort()).toEqual(["a.md", "p.md"]);
+	});
+});
+
+describe("フェーズ 3b の要素", () => {
+	const doc = async (zip: JSZip) => xml(zip, "word/document.xml");
+
+	it("数式は Word の数式（OMML）。ブロックは中央の段落、インラインは文中（A-11）", async () => {
+		const d = await doc(await convert("文中 $x^2$ の式。\n\n$$\n\\frac{a}{b}\n$$"));
+		expect(d.match(/<m:oMath>/g)).toHaveLength(2);
+		expect(d).toContain("<m:f>");
+		expect(d).toContain("<m:sSup>");
+		expect(d).not.toContain("$");
+	});
+
+	it("変換できない式は MathJax の画像、画像にもできなければ LaTeX のまま（A-11）", async () => {
+		const { zip, warnings } = await convertNote("$\\sideset{_1}{_2}\\sum$ と $\\undefinedcommand{x}$");
+		const d = await doc(zip);
+		expect(d).toContain("<wp:inline");
+		expect(d).toContain("$\\undefinedcommand{x}$");
+		expect(warnings.map((w) => w.code)).toEqual(["mathAsImage", "mathFailed"]);
+		const noMathJax = await convertNote("$\\sideset{_1}{_2}\\sum$", {}, "test.md", { keepComments: false }, { renderMath: undefined });
+		expect(noMathJax.warnings.map((w) => w.code)).toEqual(["mathFailed"]);
+	});
+
+	it("描画できる言語は描画結果に置き換え、取り込んだ内部リンクを解決する（A-24・A-26）", async () => {
+		const { zip, warnings } = await convertNote("```dataview\nTABLE status\n```", {}, "word3b/x.md");
+		const d = await doc(zip);
+		expect(d).toContain("<w:tbl>");
+		expect(d).not.toContain("TABLE status");
+		expect(await xml(zip, "word/_rels/document.xml.rels")).toContain('Target="data/データ%20A.docx"');
+		expect(warnings).toEqual([]);
+	});
+
+	it("描画できなかったものと、Dataview がないものは原文のまま警告する。登録のない言語は警告しない", async () => {
+		const failed = await convertNote("```dataviewjs\ndv.paragraph(1)\n```\n\n```other\nx\n```");
+		expect(await doc(failed.zip)).toContain("dv.paragraph(1)");
+		expect(failed.warnings).toEqual([{ code: "renderFailed", detail: "dataviewjs: timeout (10 s)" }]);
+		const missing = await convertNote("```dataview\nLIST\n```", {}, "test.md", { keepComments: false }, { renderableLanguage: () => false });
+		expect(missing.warnings).toEqual([{ code: "pluginMissing", detail: "dataview" }]);
+	});
+
+	it("外部の画像: オプションがオフならリンク、オンなら埋め込み、取得に失敗したらリンクのまま警告（A-20）", async () => {
+		const md = "![logo|120](https://example.com/a.png) ![x](https://example.com/no-such.png)";
+		const off = await convertNote(md);
+		expect(await doc(off.zip)).not.toContain("<wp:inline");
+		const on = await convertNote(md, {}, "test.md", { keepComments: false, downloadExternalImages: true });
+		const d = await doc(on.zip);
+		expect(d.match(/<wp:inline/g)).toHaveLength(1);
+		expect(d).toContain('cx="1143000"'); // 幅 120 px = 1,143,000 EMU
+		expect(await xml(on.zip, "word/_rels/document.xml.rels")).toContain("no-such.png");
+		expect(on.warnings).toEqual([{ code: "imageFailed", detail: "https://example.com/no-such.png: HTTP 404" }]);
+	});
+
+	it("テーマのコールアウトの色が読めればその色、読めなければ固定の色（A-6）", async () => {
+		const d = await doc((await convertNote("> [!tip] t\n\n> [!note] n", {}, "test.md", { keepComments: false }, { calloutColor: (type) => (type === "tip" ? "FF00AA" : undefined) })).zip);
+		expect(d).toMatch(/w:color="FF00AA" w:sz="24"/);
+		expect(d).toMatch(/w:color="086DDD" w:sz="24"/);
 	});
 });

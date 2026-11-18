@@ -16,6 +16,8 @@ test-vault/**/_export/
 *.docx
 *.xlsx
 ~$*
+# 変換結果の確認用の PDF・PNG・一覧ページ（npm run preview:export で生成。基準画像も各自の環境のフォントで描画されるため入れない）
+.preview/
 
 # 機密
 .env

@@ -1,4 +1,4 @@
-// 設定画面（G5）。項目の一覧と既定値は docs/design/settings.md に従う。フェーズ 3a までの項目を出す。
+// 設定画面（G5）。項目の一覧と既定値は docs/design/settings.md に従う。フェーズ 3b までの項目を出す。
 import { App, PluginSettingTab, Setting } from "obsidian";
 import { DEFAULT_SETTINGS, normalizeSettings, parseLines, type PluginSettings } from "../core/settings";
 import { t } from "../i18n";
@@ -179,6 +179,17 @@ export class BatchOfficeExportSettingTab extends PluginSettingTab {
 			.setName(t("settings.frontmatterTable.name"))
 			.setDesc(t("settings.frontmatterTable.desc"))
 			.addToggle((tg) => tg.setValue(s.frontmatterTable).onChange(async (v) => save("frontmatterTable", v)));
+		new Setting(containerEl)
+			.setName(t("settings.downloadExternalImages.name"))
+			.setDesc(t("settings.downloadExternalImages.desc"))
+			.addToggle((tg) => tg.setValue(s.downloadExternalImages).onChange(async (v) => save("downloadExternalImages", v)));
+		new Setting(containerEl).setName(t("settings.calloutColor.name")).addDropdown((d) =>
+			d
+				.addOption("fixed", t("settings.calloutColor.fixed"))
+				.addOption("theme", t("settings.calloutColor.theme"))
+				.setValue(s.calloutColorSource)
+				.onChange(async (v) => save("calloutColorSource", v as PluginSettings["calloutColorSource"])),
+		);
 	}
 
 	override hide(): void {

@@ -204,3 +204,17 @@ sequenceDiagram
 
 - フェーズ 3a では `MarkdownRenderer.render()` による描画依頼は使わない。Obsidian に頼るのは、リンクの解決（`getFirstLinkpathDest`）・画像の読み込みと PNG 化（canvas）・コードのトークン化（`loadPrism()`）・frontmatter（`metadataCache`）だけで、どれも `src/obsidian/vault-env.ts` のホスト関数にした
 - 描画依頼（Dataview・他プラグインのコードブロック・数式）はフェーズ 3b で扱う。このフローの未決事項は 3b の準備で決める
+
+## 決定済み（2026-11-18・フェーズ 3b）
+
+詳細は `docs/requirements.md` の「フェーズ 3b の決定事項」。実装は `src/obsidian/plugin-render.ts`。
+
+- 結果の形: 描画結果は、このコンポーネントの中で mdast（表・リスト・段落・画像など）にしてから返す。Dataview も同じ（「結果の形が全体図のラベルに収まらない」「Dataview クエリの結果の種類」を解決: TABLE・LIST・TASK とも描画結果の表・リストを取り込む）
+- 完了待ち: 0.5 秒続けて DOM が変わらなければ完了。1 依頼の上限は 10 秒の固定で、ノートのタイムアウト（`AbortSignal`）が先ならそこで打ち切る（「完了待ちの判定の値」「完了待ちの上限時間と 03 のタイムアウトの関係」を解決）。上限に達したら「描画できなかった」として原文を残す（「上限に達したときの扱い」を解決）
+- 描画先は document につなぎ、`position: fixed` で画面外に置いて `visibility: hidden` にする（「描画先の DOM 要素を document につなぐか」を解決）。終わったら `Component.unload()` と要素の削除で片付ける
+- プラグインが描画したかの判定: 描画する前に登録の一覧（`MarkdownPreviewRenderer.codeBlockPostProcessors`、非公開）で判別し、描画後も結果が `pre > code` だけ・空なら「描画できなかった」にする
+- canvas は後片付けの前に PNG にする。tainted な canvas などで画像にできなければ、その画像だけを落とす
+- 数式（A-11）は `docx/math` の `latexToMath` で直接 OMML にするので、MathJax は変換できない式の画像化だけに使う（「数式の描画依頼の範囲」を解決）
+  - 2026-11-18 更新: Obsidian 1.15.1 同梱の MathJax は CHTML 出力（`tex2chtml`）だけで `tex2svg` がなく、画像化は実際には動いていなかった。プラグインに同梱した `mathjax-full` 3.2.2 の SVG 出力（DOM を使わない liteAdaptor、`fontCache: none`）に切り替え、変換の本体は Obsidian に依存しない `src/core/math-svg.ts` に置いた。このコンポーネントは SVG を画像（PNG の代替付き）にするだけ
+- 副作用（dataviewjs などが任意の処理を実行できること）は、README（フェーズ 6）に書く（「描画したプラグインが外部に及ぼす副作用」を解決）
+- ホスト関数は `renderableLanguage`・`renderBlock`・`renderMath`・`fetchImage`・`calloutColor`（案の `requestRender` を置き換えた）

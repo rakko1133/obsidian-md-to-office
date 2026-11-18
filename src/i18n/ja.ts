@@ -57,6 +57,11 @@ export const ja: Record<MessageKey, string> = {
 	"settings.keepComments.desc": "オフ: %%コメント%% を取り除きます。オン: Word の文書のコメントにします。",
 	"settings.frontmatterTable.name": "冒頭にプロパティの表を出す",
 	"settings.frontmatterTable.desc": "ノートのプロパティ（frontmatter）の表を本文の前に置きます。",
+	"settings.downloadExternalImages.name": "外部の画像をダウンロードする",
+	"settings.downloadExternalImages.desc": "オフ: Web の画像はリンクにします。オン: ダウンロードして埋め込みます（1 枚 20 MB まで）。",
+	"settings.calloutColor.name": "コールアウトの色",
+	"settings.calloutColor.fixed": "既定の色",
+	"settings.calloutColor.theme": "使っているテーマの色",
 
 	"menu.saveMermaid": "Mermaid 画像として保存",
 	"menu.convertWord": "Word（.docx）に変換",
@@ -126,4 +131,8 @@ export const ja: Record<MessageKey, string> = {
 	"warning.embedDepth": "ノートの埋め込みが深すぎる（5 段を超える）ため、リンクとして残しました",
 	"warning.imageFailed": "画像を読み込めませんでした",
 	"warning.unsupportedEmbed": "まだ変換に対応していない埋め込みのため、文字のまま残しました",
+	"warning.pluginMissing": "このコードブロックのプラグインが有効でないため、コードのまま残しました",
+	"warning.renderFailed": "Obsidian がこのコードブロックを描画できなかったため、コードのまま残しました",
+	"warning.mathAsImage": "Word の数式にできなかったため、画像にしました",
+	"warning.mathFailed": "数式を変換できなかったため、LaTeX のまま残しました",
 };

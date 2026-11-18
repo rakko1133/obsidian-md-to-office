@@ -3,6 +3,13 @@
 import { apiVersion, loadMermaid } from "obsidian";
 import type { MermaidRenderer, RenderedDiagram } from "../core/mermaid-export";
 import type { MermaidRenderParams } from "../core/mermaid";
+import { resolveCssVariables } from "../core/svg-css";
+
+/**
+ * SVG の作り方の版。キャッシュのキー（mermaid.js のバージョン）に足して、作り方を変えたときに古いキャッシュを使わないようにする。
+ * 2: CSS 変数を実際の値に置き換えた（Word で図が黒くなる不具合の修正・フェーズ 3b）
+ */
+const SVG_FORMAT = 2;
 
 interface MermaidApi {
 	render(id: string, text: string): Promise<{ svg: string }>;
@@ -15,7 +22,7 @@ export async function createMermaidRenderer(): Promise<MermaidRenderer> {
 	const mermaid = (await loadMermaid()) as MermaidApi;
 	const version = typeof mermaid.version === "string" ? mermaid.version : `obsidian-${apiVersion}`;
 	return {
-		version,
+		version: `${version}+svg${SVG_FORMAT}`,
 		render: (source, params, needPng, signal) => renderDiagram(mermaid, source, params, needPng, signal),
 	};
 }
@@ -45,7 +52,8 @@ async function renderDiagram(mermaid: MermaidApi, source: string, params: Mermai
 
 /** 幅と高さを viewBox から決めて属性に書く。保存用の svg には白い背景を付ける（R4）。plainSvg は背景なし。 */
 function normalizeSvg(raw: string): { svg: string; plainSvg: string; width: number; height: number } {
-	const doc = new DOMParser().parseFromString(raw, "image/svg+xml");
+	// Word などは CSS 変数を解釈しないので、実際の値に置き換える
+	const doc = new DOMParser().parseFromString(resolveCssVariables(raw), "image/svg+xml");
 	const el = doc.documentElement;
 	const viewBox = (el.getAttribute("viewBox") ?? "").split(/[\s,]+/).map(Number);
 	let width = viewBox.length === 4 && viewBox[2]! > 0 ? viewBox[2]! : parseFloat(el.getAttribute("width") ?? "") || 800;

@@ -1,9 +1,11 @@
 // 構文解析（parse）と変換（transform）の段（G2）。Obsidian API に依存しない。
-// 構文解析: remark-parse + remark-gfm（表・取り消し線・タスク・URL の自動リンク・脚注）+ remark-frontmatter（YAML）。
+// 構文解析: remark-parse + remark-gfm（表・取り消し線・タスク・URL の自動リンク・脚注）+ remark-math（数式: フェーズ 3b）+ remark-frontmatter（YAML）。
 // 変換: 処理の配列を順に適用する（H3 の拡張に備え、処理を 1 つずつ足せる形にする）。
+import type {} from "mdast-util-math";
 import type { Code, Parent, PhrasingContent, Root, RootContent, Text } from "mdast";
 import remarkFrontmatter from "remark-frontmatter";
 import remarkGfm from "remark-gfm";
+import remarkMath from "remark-math";
 import remarkParse from "remark-parse";
 import { unified } from "unified";
 import type { Warning } from "./types";
@@ -32,7 +34,7 @@ declare module "mdast" {
 }
 
 export function parseMarkdown(markdown: string): Root {
-	return unified().use(remarkParse).use(remarkGfm).use(remarkFrontmatter, ["yaml"]).parse(markdown) as Root;
+	return unified().use(remarkParse).use(remarkGfm).use(remarkMath).use(remarkFrontmatter, ["yaml"]).parse(markdown) as Root;
 }
 
 export interface TransformContext {
@@ -111,8 +113,8 @@ export function markTaskStates(tree: Root): void {
 	});
 }
 
-/** .docx にしない記法（A-0b）。フェーズ 3a で画像・HTML・脚注・参照形式のリンクに対応した（obsidian-syntax.ts）。数式は 3b。 */
-const UNSUPPORTED = new Set(["imageReference", "linkReference", "definition", "math", "inlineMath"]);
+/** .docx にしない記法（A-0b）。フェーズ 3a で画像・HTML・脚注・参照形式のリンクに対応した（obsidian-syntax.ts）。フェーズ 3b で数式に対応した。 */
+const UNSUPPORTED = new Set(["imageReference", "linkReference", "definition"]);
 
 /** 未対応の記法に印を付け、種類ごとに 1 つ警告を出す（A-0b）。 */
 export function markUnsupported(tree: Root, ctx: TransformContext): void {

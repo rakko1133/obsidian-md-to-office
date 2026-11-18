@@ -197,7 +197,7 @@ Claude 推奨（ユーザー承認）
 ### フェーズ 3b の決定事項（2026-11-18）
 
 ユーザー決定
-- 数式（A-11）: `remark-math`（MIT）を依存に足して `$…$`・`$$…$$` を構文解析し、docx ライブラリの `latexToMath`（`docx/math`、既存の依存）で Word の数式（OMML）にする。変換できない式は Obsidian 同梱の MathJax（`loadMathJax()`）で SVG（PNG の代替画像付き）にして警告する。MathJax も使えなければ LaTeX の原文を等幅で残す。LaTeX → MathML → OMML の経路と、MathML → OMML の自作は不要になった
+- 数式（A-11）: `remark-math`（MIT）を依存に足して `$…$`・`$$…$$` を構文解析し、docx ライブラリの `latexToMath`（`docx/math`、既存の依存）で Word の数式（OMML）にする。変換できない式はプラグインに同梱した MathJax（`mathjax-full`、Apache-2.0）で SVG（PNG の代替画像付き）にして警告する。MathJax も読めない式は LaTeX の原文を等幅で残す。（2026-11-18 更新、ユーザー決定: Obsidian 同梱の MathJax は CHTML 出力だけで SVG を作れないため同梱に切り替えた。main.js は約 1.7 MB 増える）LaTeX → MathML → OMML の経路と、MathML → OMML の自作は不要になった
 - Dataview（A-24）: `api.query()` は使わず、`dataview`・`dataviewjs`・他のプラグインのコードブロックを同じ方法（Obsidian に描画させた結果を取り込む）で扱う
 - 描画結果の HTML → mdast は自作の小さな変換にする（`hast-util-to-mdast` は使わない: G2 の検討事項を解決）
 
@@ -214,9 +214,9 @@ Claude 推奨（ユーザーが確認なしでの実装を指示）
 
 テスト用 Vault の `word3b/` に、数式（インライン・ブロック・行列・場合分け・aligned・変換できない式）、Dataview（TABLE・LIST・TASK・dataviewjs。Dataview はユーザーがテスト用 Vault に入れる）、テスト用のコードブロック、外部の画像、コールアウトのテーマ色のサンプルを置いて確かめる。
 
-- [ ] A. 変換結果: 各 .docx が Word と LibreOffice で開ける。数式が Word の数式として編集でき、変換できない式は画像になって警告が出る。Dataview の TABLE は表、LIST はリスト、TASK はタスクの記号付きのリスト、dataviewjs の結果が入る。テスト用の処理の SVG と canvas が画像になる。設定がオンのとき外部の画像が埋め込まれる。`theme` のときコールアウトの色がテーマの色になる
-- [ ] B. 自動テスト: 数式の変換、HTML → mdast の変換（偽の DOM）、描画を頼む対象の判別の単体テストと、新しいサンプルのスナップショットテスト
-- [ ] C. 記録とリポジトリ: A-11・A-24・G2 の記述を直す。フロー図 04・05・07 と作業記録に反映する。`feat/plugin-render` で作業し、手動で確認してからマージして、タグ `0.3.1` を付ける
+- [x] A. 変換結果（2026-11-18 Claude が Obsidian を操作して確認。LibreOffice は手元にないため未確認）: 各 .docx が Word と LibreOffice で開ける。数式が Word の数式として編集でき、変換できない式は画像になって警告が出る。Dataview の TABLE は表、LIST はリスト、TASK はタスクの記号付きのリスト、dataviewjs の結果が入る。テスト用の処理の SVG と canvas が画像になる。設定がオンのとき外部の画像が埋め込まれる。`theme` のときコールアウトの色がテーマの色になる
+- [x] B. 自動テスト: 数式の変換、HTML → mdast の変換（偽の DOM）、描画を頼む対象の判別の単体テストと、新しいサンプルのスナップショットテスト
+- [x] C. 記録とリポジトリ: A-11・A-24・G2 の記述を直す。フロー図 04・05・07 と作業記録に反映する。`feat/plugin-render` で作業し、手動で確認してからマージして、タグ `0.3.1` を付ける
 
 ---
 
