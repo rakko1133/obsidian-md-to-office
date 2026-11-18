@@ -3,6 +3,7 @@
 import { Workbook, type Cell, type CellRichTextValue, type Worksheet } from "exceljs";
 import type { PhrasingContent, Root, RootContent, Table } from "mdast";
 import type { ImageAsset } from "./obsidian-syntax";
+import type { OutlineRow } from "./xlsx-outline";
 import type { Warning } from "./types";
 import {
 	CELL_TEXT_MAX,
@@ -41,6 +42,8 @@ export interface XlsxLabels {
 	column(index: number): string;
 	/** 1 表 = 1 シートで、直前の見出しがない表のシート名 */
 	table(index: number): string;
+	/** アウトライン形式の「本文」の列（A-30） */
+	body: string;
 }
 
 export interface XlsxBookOptions {
@@ -49,6 +52,8 @@ export interface XlsxBookOptions {
 	labels: XlsxLabels;
 	/** ブックの外のノートへのリンク（元ノートを開く obsidian://open） */
 	noteUri(notePath: string): string;
+	/** 各表の左に「元ノート」「見出し」の列を足す（D-5 のオプション） */
+	sourceColumns?: boolean;
 }
 
 export interface NoteSheetsInput {
@@ -58,6 +63,14 @@ export interface NoteSheetsInput {
 	/** ノートの最初の見出し（目次の「見出し」） */
 	firstHeading?: string;
 	tables: XlsxTable[];
+}
+
+/** アウトライン形式のシート 1 枚分（A-30 のオプション）。 */
+export interface NoteOutlineInput {
+	notePath: string;
+	noteName: string;
+	firstHeading?: string;
+	rows: OutlineRow[];
 }
 
 interface Run {
@@ -235,10 +248,31 @@ export class XlsxBook {
 
 	/** ノートの表をシートにして足す。途中で例外が出たら、このノートで足したシートを取り除いてから投げる（08 の決定）。 */
 	addNote(input: NoteSheetsInput): Warning[] {
+		const tables = this.options.sourceColumns ? input.tables.map((t) => this.withSourceColumns(t, input.notePath)) : input.tables;
 		const groups =
 			this.options.sheetUnit === "perNote"
-				? [{ name: input.noteName, tables: input.tables }]
-				: input.tables.map((table, i) => ({ name: table.title ?? this.options.labels.table(i + 1), tables: [table] }));
+				? [{ name: input.noteName, tables }]
+				: tables.map((table, i) => ({ name: table.title ?? this.options.labels.table(i + 1), tables: [table] }));
+		return this.transaction(input.notePath, (warnings, addSheet) => {
+			for (const group of groups) {
+				const sheet = addSheet(group.name);
+				warnings.push(...this.writeSheet(sheet, group.tables, input.notePath));
+				this.toc.push({ sheet: sheet.name, notePath: input.notePath, heading: input.firstHeading ?? "", tables: group.tables.length });
+			}
+		});
+	}
+
+	/** ノートの本文をアウトライン形式のシートにして足す（A-30 のオプション）。 */
+	addOutlineNote(input: NoteOutlineInput): Warning[] {
+		return this.transaction(input.notePath, (warnings, addSheet) => {
+			const sheet = addSheet(input.noteName);
+			warnings.push(...this.writeOutline(sheet, input.rows, input.notePath));
+			this.toc.push({ sheet: sheet.name, notePath: input.notePath, heading: input.firstHeading ?? "", tables: input.rows.filter((r) => r.kind === "table").length });
+		});
+	}
+
+	/** ノート 1 件分のシートを足す。途中で例外が出たら、足したシート・名前・リンク・目次の行を元に戻してから投げる。 */
+	private transaction(notePath: string, write: (warnings: Warning[], addSheet: (name: string) => Worksheet) => void): Warning[] {
 		const added: Worksheet[] = [];
 		const namesBefore = new Set(this.usedNames);
 		const tableCountBefore = this.tableCount;
@@ -246,14 +280,12 @@ export class XlsxBook {
 		const tocBefore = this.toc.length;
 		const warnings: Warning[] = [];
 		try {
-			for (const group of groups) {
-				const name = uniqueSheetName(group.name, this.usedNames);
-				const sheet = this.workbook.addWorksheet(name);
+			write(warnings, (name) => {
+				const sheet = this.workbook.addWorksheet(uniqueSheetName(name, this.usedNames));
 				added.push(sheet);
-				warnings.push(...this.writeSheet(sheet, group.tables, input.notePath));
-				this.toc.push({ sheet: name, notePath: input.notePath, heading: input.firstHeading ?? "", tables: group.tables.length });
-			}
-			if (added[0] && !this.noteSheets.has(input.notePath)) this.noteSheets.set(input.notePath, added[0].name);
+				return sheet;
+			});
+			if (added[0] && !this.noteSheets.has(notePath)) this.noteSheets.set(notePath, added[0].name);
 			return warnings;
 		} catch (error) {
 			for (const sheet of added) this.workbook.removeWorksheet(sheet.id);
@@ -264,6 +296,19 @@ export class XlsxBook {
 			this.toc.length = tocBefore;
 			throw error;
 		}
+	}
+
+	/** 表の左に「元ノート」（元ノートを開くリンク）と「見出し」の列を足す（D-5 のオプション）。 */
+	private withSourceColumns(table: XlsxTable, notePath: string): XlsxTable {
+		const { labels } = this.options;
+		const source: PhrasingContent = { type: "link", url: this.options.noteUri(notePath), title: null, children: [{ type: "text", value: notePath }] };
+		const heading: PhrasingContent[] = table.title !== undefined ? [{ type: "text", value: table.title }] : [];
+		return {
+			...table,
+			align: [null, null, ...table.align],
+			header: [[{ type: "text", value: labels.source }], [{ type: "text", value: labels.heading }], ...table.header],
+			rows: table.rows.map((r) => [[source], heading, ...r]),
+		};
 	}
 
 	/** 目次・リンク先・プロパティを決めて、.xlsx のバイト列にする。 */
@@ -379,11 +424,7 @@ export class XlsxBook {
 					const type = types[c]!;
 					if (type.numFmt && typeof cell.value !== "string" && cell.value !== null) cell.numFmt = type.numFmt;
 					if (content.text.includes("\n")) wrapColumns.add(c);
-					if (content.link !== undefined) {
-						if (content.link.startsWith(NOTE_LINK_SCHEME)) {
-							this.pendingLinks.push({ sheet, address, text: content.text, notePath: content.link.slice(NOTE_LINK_SCHEME.length) });
-						} else if (!content.link.startsWith("#")) setLink(cell, content.text, content.link);
-					}
+					this.applyLink(sheet, address, content);
 					if (content.image) this.placeImage(sheet, content.image, headerRow + ri, c, (px) => (widths[c] = Math.max(widths[c] ?? 0, px)));
 				}),
 			);
@@ -416,6 +457,130 @@ export class XlsxBook {
 			fitToWidth: 1,
 			fitToHeight: 0,
 			...(headerRowOfOnlyTable > 0 ? { printTitlesRow: `1:${headerRowOfOnlyTable}` } : {}),
+		};
+		return warnings;
+	}
+
+	/** セルの最初のリンクを付ける。ノートへのリンクは、ブックを完成させるときに決める（A-32）。 */
+	private applyLink(sheet: Worksheet, address: string, content: CellContent): void {
+		if (content.link === undefined) return;
+		if (content.link.startsWith(NOTE_LINK_SCHEME)) {
+			this.pendingLinks.push({ sheet, address, text: content.text, notePath: content.link.slice(NOTE_LINK_SCHEME.length) });
+		} else if (!content.link.startsWith("#")) setLink(sheet.getCell(address), content.text, content.link);
+	}
+
+	/**
+	 * アウトライン形式のシート（A-30 のオプション）。列は H1・H2・H3・本文。1 段落 / 1 リスト項目 = 1 行。
+	 * 表は本文の列から右へ並べ、表ごとに型を判定する。見出しの下の行を Excel の行のグループ化で折りたためるようにする。
+	 */
+	private writeOutline(sheet: Worksheet, rows: readonly OutlineRow[], notePath: string): Warning[] {
+		const warnings: Warning[] = [];
+		const header = ["H1", "H2", "H3", this.options.labels.body];
+		const BODY = 4;
+		const widths = header.map(displayWidth);
+		const measure = (col: number, text: string) => (widths[col - 1] = Math.max(widths[col - 1] ?? 0, displayWidth(text)));
+		header.forEach((text, i) => {
+			const cell = sheet.getCell(1, i + 1);
+			cell.value = text;
+			styleHeaderCell(cell);
+		});
+		const truncated = (address: string) => (detail: string) => warnings.push({ code: "cellTruncated", detail: `${notePath}: ${sheet.name}!${address}${detail}` });
+		let r = 2;
+		let maxLevel = 0;
+		const setLevel = (level: number) => {
+			if (level <= 0) return;
+			sheet.getRow(r).outlineLevel = level;
+			maxLevel = Math.max(maxLevel, level);
+		};
+
+		for (const row of rows) {
+			switch (row.kind) {
+				case "heading": {
+					const col = row.depth <= 3 ? row.depth : BODY;
+					const content = cellContent(row.content);
+					const cell = sheet.getCell(r, col);
+					cell.value = content.text;
+					cell.font = { bold: true };
+					measure(col, content.text);
+					setLevel(row.level);
+					r++;
+					break;
+				}
+				case "text": {
+					const content = cellContent(row.content);
+					const address = `${columnLetter(BODY - 1)}${r}`;
+					const cell = sheet.getCell(address);
+					cell.value = cellValue(content, { kind: "string" }, truncated(address));
+					if (row.bold) cell.font = { bold: true };
+					if (content.text.includes("\n")) cell.alignment = { vertical: "top", wrapText: true };
+					this.applyLink(sheet, address, content);
+					measure(BODY, content.text);
+					setLevel(row.level);
+					r++;
+					break;
+				}
+				case "code": {
+					const cell = sheet.getCell(r, BODY);
+					cell.value = row.text.length > CELL_TEXT_MAX ? row.text.slice(0, CELL_TEXT_MAX) : row.text;
+					if (row.text.length > CELL_TEXT_MAX) truncated(`${columnLetter(BODY - 1)}${r}`)(` (${row.text.length})`);
+					cell.font = { name: CODE_FONT };
+					cell.alignment = { vertical: "top", wrapText: true };
+					measure(BODY, row.text);
+					setLevel(row.level);
+					r++;
+					break;
+				}
+				case "table": {
+					const { table } = row;
+					table.header.forEach((h, c) => {
+						const cell = sheet.getCell(r, BODY + c);
+						cell.value = plainText(h);
+						cell.font = { bold: true };
+						cell.border = thinBorder();
+						measure(BODY + c, plainText(h));
+					});
+					setLevel(row.level);
+					r++;
+					const contents = table.rows.map((cells) => cells.map((c) => cellContent(c)));
+					const types = table.header.map((_, c) => detectColumnType(contents.map((cells) => cells[c]?.text ?? "")));
+					for (const cells of contents) {
+						cells.forEach((content, c) => {
+							const address = `${columnLetter(BODY - 1 + c)}${r}`;
+							const cell = sheet.getCell(address);
+							cell.value = cellValue(content, types[c]!, truncated(address));
+							if (types[c]!.numFmt && typeof cell.value !== "string" && cell.value !== null) cell.numFmt = types[c]!.numFmt!;
+							const horizontal = table.align[c] ?? undefined;
+							if (horizontal) cell.alignment = { horizontal };
+							cell.border = thinBorder();
+							this.applyLink(sheet, address, content);
+							measure(BODY + c, content.text);
+						});
+						setLevel(row.level);
+						r++;
+					}
+					break;
+				}
+			}
+		}
+
+		let total = 0;
+		widths.forEach((w, i) => {
+			const { width, wrap } = columnWidth(w);
+			sheet.getColumn(i + 1).width = width;
+			total += width;
+			if (wrap) sheet.getColumn(i + 1).alignment = { vertical: "top", wrapText: true };
+		});
+		sheet.views = [{ state: "frozen", ySplit: 1 }];
+		// 見出しの行（まとめの行）は、折りたたむ行の上にある
+		sheet.properties.outlineProperties = { summaryBelow: false, summaryRight: false };
+		// exceljs は「行の段 >= シートの outlineLevelRow」の行に collapsed（折りたたみ済みの印）を付けるので、行の段より 1 つ大きくする
+		sheet.properties.outlineLevelRow = maxLevel + 1;
+		// 「幅を 1 ページに収める」（fitToPage）は付けない。exceljs は sheetPr の中に pageSetUpPr を outlinePr より先に書き、
+		// 仕様の順番（outlinePr → pageSetUpPr）と逆になって Excel が開けないため。本文の列は 60 文字分で折り返すので、横にははみ出しにくい
+		sheet.pageSetup = {
+			paperSize: 9,
+			orientation: total > LANDSCAPE_TOTAL_WIDTH ? "landscape" : "portrait",
+			printTitlesRow: "1:1",
 		};
 		return warnings;
 	}
