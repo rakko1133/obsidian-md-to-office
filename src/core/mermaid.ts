@@ -1,9 +1,7 @@
 // Mermaid の図の取り出し・描画用ソースの組み立て・ハッシュと命名（06: Mermaid の画像化・R1・R4）。
 // Obsidian API に依存しない。実際の描画は src/obsidian/mermaid-renderer.ts が行う。
-import type { Code, Root } from "mdast";
-import remarkParse from "remark-parse";
-import { unified } from "unified";
 import { sha256Hex } from "./hash";
+import { parseMarkdown, visitMermaidCodes } from "./markdown";
 
 /** ノートの中の Mermaid の図 1 つ。index は 1 から始まるノート内の連番。 */
 export interface MermaidBlock {
@@ -19,17 +17,10 @@ export interface MermaidRenderParams {
 	transparentBackground: boolean;
 }
 
-/** Markdown から Mermaid のコードブロックを、出てくる順に取り出す（G2: mdast を使う）。 */
+/** Markdown から Mermaid のコードブロックを、出てくる順に取り出す（G2: mdast を使う）。連番は markMermaid と同じ順序。 */
 export function extractMermaidBlocks(markdown: string): MermaidBlock[] {
-	const tree = unified().use(remarkParse).parse(markdown) as Root;
 	const blocks: MermaidBlock[] = [];
-	const visit = (node: { type: string; children?: unknown[] }): void => {
-		if (node.type === "code" && (node as Code).lang?.toLowerCase() === "mermaid") {
-			blocks.push({ index: blocks.length + 1, source: (node as Code).value });
-		}
-		for (const child of (node.children ?? []) as { type: string; children?: unknown[] }[]) visit(child);
-	};
-	visit(tree);
+	visitMermaidCodes(parseMarkdown(markdown), (node) => blocks.push({ index: blocks.length + 1, source: node.value }));
 	return blocks;
 }
 
