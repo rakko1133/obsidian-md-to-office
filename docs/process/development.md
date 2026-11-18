@@ -105,6 +105,15 @@ Obsidian を使う確認は自動化していない（G5）。テスト用 Vault
 - [ ] E1: 書き出した後、`_export/` の中に `.tmp` で終わるファイルがない。元のノートの更新日時が変わっていない
 - [ ] E2: 結果レポートに件数（成功・スキップ・失敗）と警告が出る。`phase1/folder-a/broken.md` は失敗、`no-diagram.md` はスキップになる。`test-vault/.obsidian/plugins/batch-office-export/export-manifest.json` に、`_export/...` の相対パスで記録されている
 
+## フェーズ 5b の手動確認（完了条件 A）
+
+開発用の自動実行で確かめる。サンプルは `test-vault/style/`（見出し 1〜6・図・画像・表の `01-style.md`、Word で作ったテンプレート `templates/red-headings.dotx`: 見出し 1 が赤、見出し 2 が紺）。
+
+- [x] 見出しのスタイル（2026-11-18 Claude が確認）: `--mode docx --path word/01-headings.md`。見出しが大きさと太さで区別できる
+- [x] 体裁をすべてオン: `--mode docx --path style/01-style.md --set headingNumbering=true --set pageBreakBeforeH1=true --set tableFullWidth=true --set figureCaptions=true --set tableCaptions=true`。段落番号（2 つ目の見出し 1 は「2」）、2 つ目の見出し 1 の前で改ページ、表の幅 100%、図 1〜3（Mermaid の title・代替テキスト・直前の見出し）、表 1（表の上）
+- [x] テンプレート: `--set wordTemplatePath=style/templates/red-headings.dotx`。見出し 1 が赤、見出し 2 が紺。ないパスを指定すると実行の警告が出て、内蔵のスタイルで変換される
+- [x] 結合出力との組み合わせ: `--mode docx --path combine --combine` に段落番号・図表番号・テンプレート。章が 1〜4、図表番号は章をまたいで通し番号
+
 ## フェーズ 5a の手動確認（完了条件 A）
 
 開発用の自動実行で確かめる。サンプルは `test-vault/combine/`（MOC `combine.md`、`order` 付きの 2 本、表と図の 1 本、サブフォルダ `sub/`）。

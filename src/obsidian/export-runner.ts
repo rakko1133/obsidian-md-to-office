@@ -2,13 +2,15 @@
 // - mermaid: Mermaid 画像として保存（R1 の単独保存・フェーズ 1）
 // - docx: Word に変換（フェーズ 2。フェーズ 3a でリンク・埋め込み・画像などを足した）
 // - xlsx: Excel に変換（フェーズ 4a）。1 フォルダ = 1 ブックでは、全ノートの処理の後にブックを完成させる（D7）
-import { FileSystemAdapter, Notice, TFile, type App } from "obsidian";
+import { FileSystemAdapter, Notice, TFile, normalizePath, type App } from "obsidian";
+import { promises as fs } from "fs";
 import * as nodePath from "path";
 import { exportDocxNote, planDocxNote, type PlannedOutput, type VaultEnvironment } from "../core/docx-export";
 import { applyResults } from "../core/manifest";
 import { exportMermaidNote, planMermaidNote, type MermaidExportDeps } from "../core/mermaid-export";
 import { failedResult, mergeResults, runSequential } from "../core/run";
 import { DocxCombineRun, planCombinedNote } from "../core/docx-combine";
+import { readTemplate, type WordTemplate } from "../core/docx-template";
 import { XlsxRun, planXlsxNote, xlsxUnit } from "../core/xlsx-export";
 import { SummaryRun, planSummary, type SummaryLabels } from "../core/xlsx-summary";
 import type { XlsxLabels } from "../core/xlsx-render";
@@ -59,6 +61,13 @@ interface ModeContext {
 	combined?: DocxCombineRun;
 	/** 開始時に読んだマニフェスト（結合出力の変換対象の範囲: A-18） */
 	manifest?: ManifestSnapshot;
+	/** Word のテンプレート（C-1b。実行の最初に 1 回読む） */
+	template?: WordTemplate;
+}
+
+/** Word の体裁の文字とテンプレート（DocxExportDeps に足す）。 */
+function wordExtras(ctx: ModeContext): { tocLabel: string; captionLabels: { figure: string; table: string }; template?: WordTemplate } {
+	return { tocLabel: t("docx.toc"), captionLabels: { figure: t("docx.figure"), table: t("docx.table") }, ...(ctx.template ? { template: ctx.template } : {}) };
 }
 
 /** モードごとの違い: 確認画面の題名、ドライラン、ノート 1 件の処理。 */
@@ -92,13 +101,19 @@ const MODES: Record<Exclude<ExportMode, "office">, ModeDefinition> = {
 				...ctx.deps,
 				strictLineBreaks: readStrictLineBreaks(ctx.app),
 				vault: ctx.vault,
-				tocLabel: t("docx.toc"),
+				...wordExtras(ctx),
 			});
 		},
-		process: ({ settings, deps, app, vault, selected, combined }, path, signal, manifest) =>
-			combined
-				? combined.addNote(path, signal)
-				: exportDocxNote(path, signal, settings, manifest, { ...deps, strictLineBreaks: readStrictLineBreaks(app), vault, convertedNotes: selected, tocLabel: t("docx.toc") }),
+		process: (ctx, path, signal, manifest) =>
+			ctx.combined
+				? ctx.combined.addNote(path, signal)
+				: exportDocxNote(path, signal, ctx.settings, manifest, {
+						...ctx.deps,
+						strictLineBreaks: readStrictLineBreaks(ctx.app),
+						vault: ctx.vault,
+						convertedNotes: ctx.selected,
+						...wordExtras(ctx),
+					}),
 		finish: async ({ combined }, results) => {
 			await combined?.finish(results);
 		},
@@ -174,6 +189,12 @@ function xlsxLabels(): XlsxLabels {
 		table: (n) => t("xlsx.table", { n: String(n) }),
 		body: t("xlsx.body"),
 	};
+}
+
+/** テンプレートのバイト列。絶対パスならファイルシステムから、それ以外は Vault の中から読む。 */
+async function readTemplateBytes(app: App, path: string): Promise<Uint8Array> {
+	if (nodePath.isAbsolute(path)) return new Uint8Array(await fs.readFile(path));
+	return new Uint8Array(await app.vault.adapter.readBinary(normalizePath(path)));
 }
 
 /** Obsidian の「厳密な改行」の設定（A-2）。非公開 API なので、読めなければ undefined。 */
@@ -307,8 +328,16 @@ export async function runExport(host: ExportHost, mode: ExportMode, source: Targ
 		// 10: マニフェストは開始時に 1 回だけ読む（D4）
 		const { snapshot, warnings: loadWarnings } = await store.load();
 		ctx.manifest = snapshot;
-		definition.start?.(ctx, notes);
 		const runWarnings: Warning[] = [...loadWarnings];
+		// Word のテンプレート（C-1b）: 読めなければ内蔵のスタイルで続け、実行の警告にする。結合出力の準備（start）より前に読む
+		if (settings.wordTemplatePath !== "" && (definition === MODES.docx || definition === MODES.both)) {
+			try {
+				ctx.template = readTemplate(await readTemplateBytes(app, settings.wordTemplatePath));
+			} catch (error) {
+				runWarnings.push({ code: "templateFailed", detail: `${settings.wordTemplatePath}: ${error instanceof Error ? error.message : String(error)}` });
+			}
+		}
+		definition.start?.(ctx, notes);
 
 		// 03: 1 件ずつ順に変換
 		const progress = new ProgressNotice();

@@ -2,7 +2,7 @@
 // 1 フォルダ = 1 つの .docx。ノートごとに組み立て（prepareDocxNote）、全ノートの処理の後に章として並べて 1 つの文書の木にまとめ、
 // renderDocx に 1 回渡す。まとめるときに、脚注・ブックマーク・コメント・Mermaid の図の連番を章ごとに付け直す。
 import type { Link, PhrasingContent, Root, RootContent } from "mdast";
-import { pageDecorations, prepareDocxNote, writeWithConflictPolicy, type DocxExportDeps, type PlannedOutput } from "./docx-export";
+import { pageDecorations, prepareDocxNote, styleOptions, writeWithConflictPolicy, type DocxExportDeps, type PlannedOutput } from "./docx-export";
 import { renderDocx, type DiagramAsset } from "./docx-render";
 import { mapFrontmatter, valueToText } from "./frontmatter";
 import { baseName, dirName, joinPath, noteBaseName, outputDirFor, plannedAction, refKey, relativeUrl } from "./output-plan";
@@ -284,6 +284,7 @@ export class DocxCombineRun {
 						comments,
 						properties: fm.properties,
 						...pageDecorations(this.settings, { title, author: creator, date: valueToText(mocFm?.date), combined: true }, this.deps.tocLabel),
+						...styleOptions(this.settings, this.deps),
 					}),
 				);
 				file = await writeWithConflictPolicy(group.output, bytes, this.settings.onConflict, this.deps, signal, "docx");

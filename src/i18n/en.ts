@@ -78,6 +78,16 @@ export const en = {
 	"settings.combineOrder.moc": "MOC order",
 	"settings.defaultCombine.name": "Combine by default",
 	"settings.defaultCombine.desc": "Turn on \"Combine each folder into one .docx\" in the confirmation dialog from the start.",
+	"settings.wordTemplatePath.name": "Template (.docx / .dotx)",
+	"settings.wordTemplatePath.desc": "A path in the vault (e.g. templates/report.dotx) or an absolute path. Its styles (headings, body text, tables, ...) are used. Leave empty for the built-in styles.",
+	"settings.headingNumbering.name": "Number headings",
+	"settings.headingNumbering.desc": "Number headings as 1, 1.1, 1.1.1.",
+	"settings.pageBreakBeforeH1.name": "Page break before heading 1",
+	"settings.tableFullWidth.name": "Full-width tables",
+	"settings.figureCaptions.name": "Figure captions",
+	"settings.figureCaptions.desc": "Add \"Figure n: caption\" below Mermaid diagrams and images (usable in a Word table of figures).",
+	"settings.tableCaptions.name": "Table captions",
+	"settings.tableCaptions.desc": "Add \"Table n: caption\" above tables. The caption is the preceding heading.",
 	"settings.excelBookUnit.name": "Workbook unit",
 	"settings.excelBookUnit.desc": "How to split .xlsx files when converting two or more notes. A single note always becomes {note name}.xlsx.",
 	"settings.excelBookUnit.perFolder": "One workbook per folder",
@@ -173,6 +183,8 @@ export const en = {
 	"xlsx.table": "Table {n}",
 	"xlsx.body": "Text",
 	"docx.toc": "Contents",
+	"docx.figure": "Figure",
+	"docx.table": "Table",
 	"summary.fileSuffix": "Summary",
 	"summary.properties": "Properties",
 	"summary.tasks": "Tasks",
@@ -209,6 +221,7 @@ export const en = {
 	"warning.mathAsImage": "This formula could not become a Word equation; inserted as an image",
 	"warning.mathFailed": "Could not convert a formula; kept as LaTeX",
 	"warning.cellTruncated": "A cell exceeded the 32,767-character limit and was truncated",
+	"warning.templateFailed": "Could not read the Word template; used the built-in styles",
 } as const;
 
 export type MessageKey = keyof typeof en;

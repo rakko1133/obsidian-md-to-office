@@ -13,6 +13,7 @@ import {
 	Footer,
 	Header,
 	PageNumber,
+	SequentialIdentifier,
 	TableOfContents,
 	ExternalHyperlink,
 	FootnoteReferenceRun,
@@ -20,6 +21,7 @@ import {
 	ImageRun,
 	InternalHyperlink,
 	LevelFormat,
+	LevelSuffix,
 	Math as DocxMath,
 	Packer,
 	PageBreak as DocxPageBreak,
@@ -34,11 +36,16 @@ import {
 	WidthType,
 	convertMillimetersToTwip,
 	type ILevelsOptions,
+	type IParagraphStyleOptions,
+	type IStylesOptions,
+	type IThemeOptions,
 	type IParagraphOptions,
 	type ParagraphChild,
 } from "docx";
 import { latexToMath } from "docx/math";
+import { strFromU8, strToU8, unzipSync, zipSync } from "fflate";
 import type { BlockContent, Code, FootnoteDefinition, Heading, List, ListItem, PhrasingContent, Root, RootContent, Table as MdTable } from "mdast";
+import { styleIds } from "./docx-template";
 import { walk } from "./markdown";
 import type { Callout, CodeToken, EmbedImage, ImageAsset } from "./obsidian-syntax";
 
@@ -102,6 +109,16 @@ export interface DocxRenderOptions {
 	cover?: { title: string; author?: string; date: string };
 	/** 目次（C-4a）の見出しの文字。なければ目次を入れない */
 	tableOfContents?: string;
+	/** テンプレート（C-1b）の styles.xml とテーマ。あればテンプレートのスタイルを使い、ないスタイルだけ内蔵のものを補う */
+	template?: { styles: string; theme?: IThemeOptions };
+	/** 見出しの段落番号「1」「1.1」…（C-1c） */
+	headingNumbering?: boolean;
+	/** 見出し 1 の前で改ページ（C-2） */
+	pageBreakBeforeH1?: boolean;
+	/** 表を本文の幅いっぱいにする（C-6） */
+	tableFullWidth?: boolean;
+	/** 図表番号（R4・C-4b）の「図」「表」の文字。なければ付けない */
+	captions?: { figure?: string; table?: string };
 }
 
 /** 用紙の大きさ（mm、縦向き）。B5 は JIS B5。 */
@@ -249,6 +266,18 @@ class NumberingRegistry {
 	config(): { reference: string; levels: ILevelsOptions[] }[] {
 		const indent = (level: number) => ({ indent: { left: LIST_INDENT_TWIP * (level + 2), hanging: LIST_INDENT_TWIP } });
 		const configs: { reference: string; levels: ILevelsOptions[] }[] = [
+			// 見出しの段落番号（C-1c）: 1 / 1.1 / 1.1.1 …。字下げせず、番号の後ろは空白
+			{
+				reference: HEADING_NUMBERING,
+				levels: Array.from({ length: 6 }, (_, level) => ({
+					level,
+					format: LevelFormat.DECIMAL,
+					text: Array.from({ length: level + 1 }, (_, k) => `%${k + 1}`).join("."),
+					alignment: AlignmentType.LEFT,
+					suffix: LevelSuffix.SPACE,
+					style: { paragraph: { indent: { left: 0, hanging: 0 } } },
+				})),
+			},
 			{
 				reference: "bullet",
 				levels: Array.from({ length: 9 }, (_, level) => ({
@@ -279,6 +308,8 @@ class NumberingRegistry {
 
 type Block = Paragraph | Table;
 
+const HEADING_NUMBERING = "heading-numbering";
+
 class Renderer {
 	readonly numbering = new NumberingRegistry();
 	/** Word の脚注（番号 → 中身）。参照された順に番号を振る（A-10） */
@@ -287,6 +318,11 @@ class Renderer {
 	private readonly footnoteIds = new Map<string, number>();
 	private nextFootnote = 1;
 	private readonly area: { width: number; height: number };
+	/** 直前の見出しの文字（図表番号のキャプション: R4・C-4b） */
+	private lastHeading: string | undefined;
+	/** まだブロックを 1 つも出していないか・直前のブロックが改ページか（見出し 1 の前の改ページ: C-2） */
+	private atStart = true;
+	private afterPageBreak = false;
 
 	constructor(
 		private readonly options: DocxRenderOptions,
@@ -301,7 +337,12 @@ class Renderer {
 	blocks(nodes: readonly RootContent[], headingShift: number): Block[] {
 		const out: Block[] = [];
 		for (const node of nodes) {
-			for (const block of this.block(node, headingShift)) {
+			const blocks = this.block(node, headingShift);
+			if (blocks.length > 0) {
+				this.atStart = false;
+				this.afterPageBreak = node.type === "pageBreak";
+			}
+			for (const block of blocks) {
 				// 表が続くと Word が 1 つの表にまとめるので、間に空の段落を入れる
 				if (block instanceof Table && out[out.length - 1] instanceof Table) out.push(new Paragraph({ children: [] }));
 				out.push(block);
@@ -318,14 +359,20 @@ class Renderer {
 				return [];
 			case "heading":
 				return [this.heading(node, headingShift)];
-			case "paragraph":
-				return [new Paragraph({ children: this.bookmarked(node, this.inlines(node.children, {})) })];
+			case "paragraph": {
+				const paragraph = new Paragraph({ children: this.bookmarked(node, this.inlines(node.children, {})) });
+				const image = soleImage(node.children);
+				const caption = image && this.options.captions?.figure !== undefined && image.data?.image ? this.caption("figure", imageCaption(image) ?? this.lastHeading) : undefined;
+				return caption ? [paragraph, caption] : [paragraph];
+			}
 			case "list":
 				return this.withBookmark(node, this.list(node, 0));
-			case "table":
-				return this.withBookmark(node, [this.table(node)]);
+			case "table": {
+				const caption = this.options.captions?.table !== undefined ? this.caption("table", this.lastHeading) : undefined;
+				return this.withBookmark(node, caption ? [caption, this.table(node)] : [this.table(node)]);
+			}
 			case "code":
-				return [this.code(node)];
+				return this.code(node);
 			case "blockquote":
 				return this.withBookmark(
 					node,
@@ -360,7 +407,26 @@ class Renderer {
 
 	private heading(node: Heading, shift: number): Paragraph {
 		const level = Math.min(6, node.depth + shift);
-		return new Paragraph({ heading: HEADINGS[level - 1]!, children: this.bookmarked(node, this.inlines(node.children, {})) });
+		this.lastHeading = phrasingText(node.children).trim() || undefined;
+		// 見出し 1 の前で改ページ（C-2）。文書の最初と、直前に改ページがあるとき（結合出力の章の境目など）は付けない
+		const pageBreakBefore = this.options.pageBreakBeforeH1 === true && level === 1 && !this.atStart && !this.afterPageBreak;
+		return new Paragraph({
+			heading: HEADINGS[level - 1]!,
+			...(pageBreakBefore ? { pageBreakBefore: true } : {}),
+			...(this.options.headingNumbering ? { numbering: { reference: HEADING_NUMBERING, level: level - 1, instance: 0 } } : {}),
+			children: this.bookmarked(node, this.inlines(node.children, {})),
+		});
+	}
+
+	/** 図表番号（R4・C-4b）:「図 n: キャプション」。番号は Word の SEQ フィールド（ラベルの文字を識別子にして、図表目次で使えるようにする）。 */
+	private caption(kind: "figure" | "table", text: string | undefined): Paragraph {
+		const label = (kind === "figure" ? this.options.captions?.figure : this.options.captions?.table) ?? "";
+		return new Paragraph({
+			style: "Caption",
+			alignment: kind === "figure" ? AlignmentType.CENTER : AlignmentType.LEFT,
+			...(kind === "table" ? { keepNext: true } : {}),
+			children: [new TextRun(`${label} `), new SequentialIdentifier(label), new TextRun(text ? `: ${text}` : "")],
+		});
 	}
 
 	/** 引用の中の段落は「引用文」スタイル（A-5）。入れ子の見出しやリストはそのまま描く。 */
@@ -466,7 +532,9 @@ class Renderer {
 
 	private gridTable(rows: TableRow[], columns: number): Table {
 		const twipWidth = Math.floor(((this.area.width / 96) * 1440) / columns);
-		return new Table({ rows, layout: TableLayoutType.AUTOFIT, columnWidths: Array(columns).fill(twipWidth), width: { size: 0, type: WidthType.AUTO } });
+		// 本文の幅いっぱい（C-6 のオプション）か、内容に合わせる（既定）
+		const width = this.options.tableFullWidth ? { size: "100%" as const, type: WidthType.PERCENTAGE } : { size: 0, type: WidthType.AUTO };
+		return new Table({ rows, layout: TableLayoutType.AUTOFIT, columnWidths: Array(columns).fill(twipWidth), width });
 	}
 
 	/** 冒頭のプロパティの表（A-27 のオプション）。 */
@@ -481,11 +549,15 @@ class Renderer {
 	}
 
 	/** コードブロック（A-7）: 色付けのトークンがあれば色を付ける。Mermaid は画像にする（A-12・R4）。 */
-	private code(node: Code): Paragraph {
+	private code(node: Code): Paragraph[] {
 		const index = node.data?.mermaidIndex;
 		if (index !== undefined) {
 			const asset = this.options.diagrams.get(index);
-			if (asset) return this.diagram(asset, index);
+			if (asset) {
+				const figure = this.diagram(asset, index);
+				// 図番号（R4）: キャプションは図の frontmatter の title、なければ直前の見出し
+				return this.options.captions?.figure !== undefined ? [figure, this.caption("figure", mermaidTitle(node.value) ?? this.lastHeading)] : [figure];
+			}
 		}
 		const tokens: CodeToken[] = node.data?.tokens ?? [{ text: node.value, types: [] }];
 		// 行ごとに、色と斜体の付いた断片に分ける
@@ -507,7 +579,7 @@ class Renderer {
 			// 行の最初の断片に改行を付ける（色なしなら 1 行 = 1 つの w:r でフェーズ 2 と同じ形）
 			pieces.forEach((piece, k) => children.push(new TextRun({ ...piece, break: i > 0 && k === 0 ? 1 : 0 })));
 		});
-		return new Paragraph({ style: "SourceCode", children: this.bookmarked(node, children) });
+		return [new Paragraph({ style: "SourceCode", children: this.bookmarked(node, children) })];
 	}
 
 	private diagram(asset: DiagramAsset, index: number): Paragraph {
@@ -697,7 +769,8 @@ export async function renderDocx(tree: Root, options: DocxRenderOptions): Promis
 	const { fonts, page } = options;
 	const body = { ascii: fonts.bodyLatin, hAnsi: fonts.bodyLatin, cs: fonts.bodyLatin, eastAsia: fonts.bodyEastAsia };
 	const head = { ascii: fonts.headingLatin, hAnsi: fonts.headingLatin, cs: fonts.headingLatin, eastAsia: fonts.headingEastAsia };
-	const headingStyle = { run: { font: head } };
+	// 見出しのスタイル（C-1a）: 大きさ（half-point）・太字・前後の間隔、次の段落と同じページに置く
+	const headingStyle = (size: number, before: number) => ({ run: { font: head, size, bold: true }, paragraph: { spacing: { before, after: 120 }, keepNext: true, keepLines: true } });
 	const paper = PAPER_MM[page.paperSize];
 	const comments = (options.comments ?? []).map((text, id) => ({
 		id,
@@ -714,36 +787,8 @@ export async function renderDocx(tree: Root, options: DocxRenderOptions): Promis
 		...(options.properties?.custom && options.properties.custom.length > 0 ? { customProperties: options.properties.custom } : {}),
 		...(comments.length > 0 ? { comments: { children: comments } } : {}),
 		footnotes: renderer.footnotes,
-		styles: {
-			default: {
-				document: { run: { font: body } },
-				title: headingStyle,
-				heading1: headingStyle,
-				heading2: headingStyle,
-				heading3: headingStyle,
-				heading4: headingStyle,
-				heading5: headingStyle,
-				heading6: headingStyle,
-			},
-			paragraphStyles: [
-				{
-					id: "Quote",
-					name: "Quote",
-					basedOn: "Normal",
-					next: "Normal",
-					run: { color: "404040" },
-					paragraph: { indent: { left: 720 }, border: { left: { style: BorderStyle.SINGLE, size: 12, color: "A6A6A6", space: 8 } } },
-				},
-				{
-					id: "SourceCode",
-					name: "Source Code",
-					basedOn: "Normal",
-					next: "Normal",
-					run: { font: MONO_FONT, size: 20 },
-					paragraph: { shading: CODE_SHADING, spacing: { before: 60, after: 60 } },
-				},
-			],
-		},
+		styles: documentStyles(options, body, headingStyle),
+		...(options.template ? { externalStyles: options.template.styles, ...(options.template.theme ? { theme: options.template.theme } : {}) } : {}),
 		numbering: { config: renderer.numbering.config() },
 		...(options.tableOfContents !== undefined ? { features: { updateFields: true } } : {}),
 		sections: [
@@ -771,7 +816,86 @@ export async function renderDocx(tree: Root, options: DocxRenderOptions): Promis
 	});
 	const created = options.properties?.created;
 	const overrides = created ? [{ path: "docProps/core.xml", data: coreXml(options, created) }] : [];
-	return Packer.pack(doc, "arraybuffer", false, overrides);
+	const packed = await Packer.pack(doc, "arraybuffer", false, overrides);
+	return options.headingNumbering ? withoutHeadingStartOverrides(packed) : packed;
+}
+
+/**
+ * 見出しの段落番号の定義（w:num）から、開始番号の上書き（w:lvlOverride / w:startOverride）を取り除く（C-1c）。
+ * docx ライブラリはすべての番号の定義にこれを付けるが、見出しの番号に付いていると、Word は印刷・PDF のレイアウトで
+ * 見出し 1 の番号を数え直してしまう（2 つ目の見出し 1 が「1」になる）。番号付きリストの上書き（リストごとの振り直し）は残す。
+ */
+export function withoutHeadingStartOverrides(docx: ArrayBuffer): ArrayBuffer {
+	const files = unzipSync(new Uint8Array(docx));
+	const numbering = files["word/numbering.xml"];
+	if (!numbering) return docx;
+	const xml = strFromU8(numbering);
+	// 見出しの段落番号の定義は、レベル 2 の番号の書式が「%1.%2」のもの（番号付きリストは「%2.」）
+	const ids = [...xml.matchAll(/<w:abstractNum\b[^>]*w:abstractNumId="(\d+)"[^>]*>([\s\S]*?)<\/w:abstractNum>/g)].filter((m) => m[2]!.includes('<w:lvlText w:val="%1.%2"/>')).map((m) => m[1]!);
+	if (ids.length === 0) return docx;
+	const fixed = xml.replace(/<w:num\b[^>]*>([\s\S]*?)<\/w:num>/g, (num: string, body: string) => {
+		const abstractId = /<w:abstractNumId w:val="(\d+)"\/>/.exec(body)?.[1];
+		return abstractId !== undefined && ids.includes(abstractId) ? num.replace(/<w:lvlOverride\b[^>]*>[\s\S]*?<\/w:lvlOverride>/g, "") : num;
+	});
+	files["word/numbering.xml"] = strToU8(fixed);
+	const zipped = zipSync(files);
+	return zipped.buffer.slice(zipped.byteOffset, zipped.byteOffset + zipped.byteLength) as ArrayBuffer;
+}
+
+/** 内蔵の段落スタイル: 引用文（A-5）・コード（A-7）・図表番号（R4・C-4b）。 */
+const BUILTIN_PARAGRAPH_STYLES: readonly IParagraphStyleOptions[] = [
+	{
+		id: "Quote",
+		name: "Quote",
+		basedOn: "Normal",
+		next: "Normal",
+		run: { color: "404040" },
+		paragraph: { indent: { left: 720 }, border: { left: { style: BorderStyle.SINGLE, size: 12, color: "A6A6A6", space: 8 } } },
+	},
+	{
+		id: "SourceCode",
+		name: "Source Code",
+		basedOn: "Normal",
+		next: "Normal",
+		run: { font: MONO_FONT, size: 20 },
+		paragraph: { shading: CODE_SHADING, spacing: { before: 60, after: 60 } },
+	},
+	{
+		id: "Caption",
+		name: "caption",
+		basedOn: "Normal",
+		next: "Normal",
+		run: { size: 18, color: "404040" },
+		paragraph: { spacing: { before: 60, after: 200 } },
+	},
+];
+
+/**
+ * 文書のスタイル。テンプレート（C-1b）があればテンプレートのスタイルを使い、テンプレートにない内蔵の段落スタイルだけを補う。
+ * なければ内蔵の既定（本文と見出しのフォント・見出しの大きさと太さ: C-1a・C-3）。
+ */
+function documentStyles(
+	options: DocxRenderOptions,
+	body: { ascii: string; hAnsi: string; cs: string; eastAsia: string },
+	headingStyle: (size: number, before: number) => NonNullable<NonNullable<IStylesOptions["default"]>["heading1"]>,
+): IStylesOptions {
+	if (options.template) {
+		const defined = styleIds(options.template.styles);
+		return { paragraphStyles: BUILTIN_PARAGRAPH_STYLES.filter((style) => !defined.has(style.id)) };
+	}
+	return {
+		default: {
+			document: { run: { font: body } },
+			title: headingStyle(48, 0),
+			heading1: headingStyle(32, 360),
+			heading2: headingStyle(28, 300),
+			heading3: headingStyle(24, 240),
+			heading4: headingStyle(22, 200),
+			heading5: headingStyle(22, 200),
+			heading6: headingStyle(22, 200),
+		},
+		paragraphStyles: BUILTIN_PARAGRAPH_STYLES,
+	};
 }
 
 /** ヘッダーのタイトルとフッターのページ番号（C-5）。表紙があるときは、先頭ページ（表紙）だけ空にする。 */
@@ -811,4 +935,35 @@ export function coreXml(options: Pick<DocxRenderOptions, "title" | "creator" | "
 		`<dcterms:modified xsi:type="dcterms:W3CDTF">${w3cdtf(new Date())}</dcterms:modified>`,
 		`</cp:coreProperties>`,
 	].join("");
+}
+
+/** インラインノードの表示テキスト（見出しの文字: 図表番号のキャプション）。 */
+function phrasingText(nodes: readonly PhrasingContent[]): string {
+	let out = "";
+	for (const node of nodes) {
+		if ("value" in node && typeof node.value === "string" && node.type !== "html") out += node.value;
+		else if ("children" in node && Array.isArray(node.children)) out += phrasingText(node.children as PhrasingContent[]);
+	}
+	return out;
+}
+
+/** 段落が画像 1 つだけ（前後の空白を除く）なら、その画像（図番号を付ける対象: C-4b）。 */
+function soleImage(nodes: readonly PhrasingContent[]): EmbedImage | undefined {
+	const rest = nodes.filter((n) => !(n.type === "text" && n.value.trim() === ""));
+	return rest.length === 1 && rest[0]!.type === "embedImage" ? rest[0] : undefined;
+}
+
+/** 画像のキャプション: 代替テキスト。ファイル名と同じ（`![[a.png]]` の代替テキスト）なら使わない（C-4b）。 */
+function imageCaption(image: EmbedImage): string | undefined {
+	const alt = image.alt.trim();
+	if (alt === "") return undefined;
+	const name = image.path.slice(image.path.lastIndexOf("/") + 1);
+	return alt === name || alt === name.replace(/\.[^.]+$/, "") ? undefined : alt;
+}
+
+/** Mermaid の図の frontmatter の title（R4）。 */
+export function mermaidTitle(source: string): string | undefined {
+	const m = /^\s*---\r?\n([\s\S]*?)\r?\n---/.exec(source);
+	const title = m ? /^title:\s*(.+?)\s*$/m.exec(m[1]!)?.[1] : undefined;
+	return title?.replace(/^["']|["']$/g, "") || undefined;
 }

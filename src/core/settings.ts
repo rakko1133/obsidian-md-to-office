@@ -82,6 +82,18 @@ export interface PluginSettings {
 	combineOrder: "fileName" | "frontmatterOrder" | "moc";
 	/** 確認画面の「1 フォルダを 1 つの .docx にまとめる」の初期値（C-8） */
 	defaultCombine: boolean;
+	/** Word のテンプレート（.docx / .dotx）。Vault の中のパスか絶対パス。空なら内蔵のスタイル（C-1b） */
+	wordTemplatePath: string;
+	/** 見出しの段落番号（C-1c） */
+	headingNumbering: boolean;
+	/** 見出し 1 の前で改ページ（C-2） */
+	pageBreakBeforeH1: boolean;
+	/** 表を本文の幅いっぱいにする（C-6） */
+	tableFullWidth: boolean;
+	/** 図番号（R4・C-4b） */
+	figureCaptions: boolean;
+	/** 表番号（C-4b） */
+	tableCaptions: boolean;
 }
 
 export const DEFAULT_SETTINGS: Readonly<PluginSettings> = {
@@ -126,6 +138,12 @@ export const DEFAULT_SETTINGS: Readonly<PluginSettings> = {
 	tableOfContents: "combined",
 	combineOrder: "fileName",
 	defaultCombine: false,
+	wordTemplatePath: "",
+	headingNumbering: false,
+	pageBreakBeforeH1: false,
+	tableFullWidth: false,
+	figureCaptions: false,
+	tableCaptions: false,
 };
 
 /**
@@ -180,6 +198,12 @@ export function normalizeSettings(raw: unknown): PluginSettings {
 		tableOfContents: oneOf(data.tableOfContents, ["never", "combined", "always"], d.tableOfContents),
 		combineOrder: oneOf(data.combineOrder, ["fileName", "frontmatterOrder", "moc"], d.combineOrder),
 		defaultCombine: typeof data.defaultCombine === "boolean" ? data.defaultCombine : d.defaultCombine,
+		wordTemplatePath: typeof data.wordTemplatePath === "string" ? data.wordTemplatePath.trim() : d.wordTemplatePath,
+		headingNumbering: typeof data.headingNumbering === "boolean" ? data.headingNumbering : d.headingNumbering,
+		pageBreakBeforeH1: typeof data.pageBreakBeforeH1 === "boolean" ? data.pageBreakBeforeH1 : d.pageBreakBeforeH1,
+		tableFullWidth: typeof data.tableFullWidth === "boolean" ? data.tableFullWidth : d.tableFullWidth,
+		figureCaptions: typeof data.figureCaptions === "boolean" ? data.figureCaptions : d.figureCaptions,
+		tableCaptions: typeof data.tableCaptions === "boolean" ? data.tableCaptions : d.tableCaptions,
 	};
 }
 
