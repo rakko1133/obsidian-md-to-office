@@ -14,13 +14,16 @@ G1 の条件: 配布物に含めるライブラリは、再配布できるライ
 | `remark-parse` | 11.0.0 | MIT | Markdown → mdast（G2） | G2 |
 | `remark-gfm` | 4.0.1 | MIT | 表・取り消し線・タスク・URL の自動リンク・脚注 | R5 |
 | `remark-frontmatter` | 5.0.0 | MIT | frontmatter を本文から外す | R5 |
+| `remark-math` | 6.0.0 | MIT | 数式 `$…$`・`$$…$$` の構文解析（フェーズ 3b）。LaTeX → Word の数式は `docx` の `docx/math`（`latexToMath`）で行う | R5 |
 | `picomatch` | 4.0.7 | MIT | glob の判定（R2） | R2 |
 
-上の 7 パッケージ自身と、そこから辿れる間接的な依存（計 257 件、`node_modules` 上で確認・フェーズ 2 時点）のライセンスは次のとおり。いずれも G1 の条件を満たす。
+上の 8 パッケージ自身と、そこから辿れる間接的な依存（計 265 件、`node_modules` 上で確認・フェーズ 3b 時点）のライセンスは次のとおり。いずれも G1 の条件を満たす。
+
+- フェーズ 3b で増えたのは `remark-math`・`mdast-util-math`・`micromark-extension-math`・`unist-util-remove-position`・`katex`・`commander`・`@types/hast`・`@types/katex` の 8 件（すべて MIT）。`katex` は `micromark-extension-math` の HTML 出力用の依存で、構文解析だけを使う main.js には含まれないことを確かめた（main.js に `katex` の文字列がない）
 
 | ライセンス | 件数 | 備考 |
 |---|---|---|
-| MIT（MIT/X11 と、オブジェクト形式で MIT と書かれた `format` を含む） | 236 | |
+| MIT（MIT/X11 と、オブジェクト形式で MIT と書かれた `format` を含む） | 244 | |
 | ISC | 12 | |
 | Apache-2.0 | 2 | |
 | BSD-3-Clause | 2 | |

@@ -8,6 +8,17 @@
 
 ---
 
+## 2026-11-18 フェーズ 3b の準備と実装
+
+- 調べたこと: 既存の依存 `docx` に `docx/math` の `latexToMath`（LaTeX → OMML）があり、分数・根号・総和・積分・行列・cases・aligned・gather・split・アクセントなどが通った。A-11 の「LaTeX → MathML → OMML」と MathML → OMML の自作は不要になった。通らなかったのは `\sideset`・`\genfrac`・`\bbox`・`\ce`・CD 環境など
+- ユーザー決定: `remark-math` を足して数式を構文解析し、変換できない式は MathJax の画像。Dataview も他のプラグインと同じく描画結果から取り込む（`api.query()` は使わない）。描画結果の HTML → mdast は自作。以降、フェーズの案は承認を待たずに記録して実装してよい（ユーザー指示）
+- 作ったもの（`feat/plugin-render`）
+  - コア: 描画結果の DOM → mdast（`dom-to-mdast.ts`）。組み立てに描画依頼・数式の検査と画像の代替・外部の画像・テーマのコールアウトの色を足した。.docx に数式（OMML）
+  - Obsidian 側: `plugin-render.ts`（画面外での `MarkdownRenderer.render()` と完了待ち、SVG・canvas・img の画像化、MathJax、`requestUrl`、`--callout-color`）。開発用ビルドにテスト用のコードブロックの処理（`boe-test-svg`・`boe-test-canvas`）。設定に 2 項目
+  - テスト用 Vault に `word3b/`
+- 確認: 単体テスト 144 件（偽の DOM での変換 5 件、3b の要素 6 件、`word3b/` のスナップショット）。フェーズ 2・3a のスナップショットの変化は `10-unsupported` の `$E = mc^2$` が数式になった部分だけ。6 本の .docx の XML がすべて整形式。本番ビルドの `main.js` は 1.44 MB（+0.06 MB。KaTeX は含まれない）
+- 残り: テスト用 Vault での手動確認（Dataview を入れて、開発用ビルドで）。Obsidian の中での描画・MathJax・テーマ色の読み取りは、単体テストでは確かめられない
+
 ## 2026-11-18 フェーズ 3a 完了（タグ 0.3.0）
 
 - ユーザーがテスト用 Vault の `word3a/` の 11 本を Word と LibreOffice で開き、完了条件 A を確認した

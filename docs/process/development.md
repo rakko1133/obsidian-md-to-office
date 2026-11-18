@@ -72,6 +72,18 @@ Obsidian を使う確認は自動化していない（G5）。テスト用 Vault
 - [ ] E1: 書き出した後、`_export/` の中に `.tmp` で終わるファイルがない。元のノートの更新日時が変わっていない
 - [ ] E2: 結果レポートに件数（成功・スキップ・失敗）と警告が出る。`phase1/folder-a/broken.md` は失敗、`no-diagram.md` はスキップになる。`test-vault/.obsidian/plugins/batch-office-export/export-manifest.json` に、`_export/...` の相対パスで記録されている
 
+## フェーズ 3b の手動確認（完了条件 A）
+
+準備: テスト用 Vault に Dataview プラグインを入れて有効にする（コミュニティプラグインから）。`npm run build:dev`（テスト用のコードブロックの処理を登録する開発用ビルド）→ `npm run deploy:test-vault` → Obsidian でプラグインを無効 → 有効にする。サンプルは `test-vault/word3b/`（6 本と、Dataview の対象の `data/`）。フォルダ `word3b` を右クリック →「Word（.docx）に変換」。各 .docx を Word と LibreOffice で開いて確かめる。
+
+- [ ] `01-math`: インラインとブロックの数式が Word の数式になる（数式をクリックすると Word の数式ツールで編集できる）。分数・根号・総和・積分・極限・行列・場合分け・aligned・記号。`\sideset` と `\genfrac` の式は画像になり、`\undefinedcommand` は LaTeX のまま残る。レポートに警告が 3 件出る。コードの中の `$x$` は数式にならない
+- [ ] `02-dataview`: TABLE が表（「データ A」のリンクをクリックすると `data/データ A.docx` が開く）、LIST がリスト、TASK が ☐ ☑ 付きのリスト、dataviewjs の見出し・段落・表が入る。インラインのクエリは文字のまま。Dataview を無効にして変換すると、コードのまま残って警告が出る
+- [ ] `03-plugin-blocks`: テスト用の SVG の図と、少し遅れて描かれる canvas の図（と、その下の段落）が画像として入る。登録のない言語はコードのまま。Mermaid は図になる
+- [ ] `04-external-images`: 設定「外部の画像をダウンロードする」がオフならリンク、オンなら画像が入る（Wikipedia のロゴは幅 120）。見つからない画像はリンクのまま残って警告が出る
+- [ ] `05-callout-theme`: 設定「コールアウトの色」を「使っているテーマの色」にし、テーマか CSS スニペットで色を変えて変換すると、その色になる
+- [ ] `06-all-in-one`: コールアウトの中と表のセルの中の数式、Dataview の LIST が入る
+- [ ] 確認の後、`npm run build` の本番ビルドに戻して配置する（本番ビルドにはテスト用の処理がない）
+
 ## フェーズ 3a の手動確認（完了条件 A）
 
 準備: `npm run build` → `npm run deploy:test-vault` → Obsidian でプラグインを無効 → 有効にする。サンプルは `test-vault/word3a/` にある（11 本と、埋め込み用の `parts/`・画像などの `attachments/`）。フォルダ `word3a` を右クリック →「Word（.docx）に変換」で、`parts/` も含めてまとめて変換する。各 .docx を Word と LibreOffice で開き、次を確かめる。

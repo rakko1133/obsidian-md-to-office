@@ -51,10 +51,10 @@ frontmatter の `export: false` による除外は常に有効で、設定は持
 |---|---|---|---|---|
 | `fileNameAsTitle` | 真偽値（見出しを 1 段下げ、ファイル名を「表題」にする） | `false` | A-1 | 2 |
 | `strictLineBreaksFallback` | 真偽値（Obsidian の設定が読めないときの「厳密な改行」） | `false` | A-2 | 2 |
-| `calloutColorSource` | `fixed`（既定色の固定表）/ `theme`（テーマの `--callout-color`） | `fixed`（3a は固定の表だけ） | A-6 | 3b |
+| `calloutColorSource` | `fixed`（既定色の固定表）/ `theme`（テーマの `--callout-color`） | `fixed` | A-6 | 3b |
 | `codeLineNumbers` | 真偽値 | `false` | A-7 | 3a |
 | `keepCommentsAsWordComments` | 真偽値（`%%…%%` を Word のコメントにする） | `false` | A-16 | 3a |
-| `downloadExternalImages` | 真偽値 | `false`（リンクのみ） | A-20 | 3b |
+| `downloadExternalImages` | 真偽値（1 枚 20 MB まで） | `false`（リンクのみ） | A-20 | 3b |
 | `frontmatterPropertyMap` | frontmatter のキー → 文書プロパティの対応 | 既定の対応（`title` → タイトル、`author` → 作成者、`tags` → キーワード、`created` → 作成日時、それ以外 → ユーザー設定のプロパティ）。3a では設定画面を作らない | A-27 | 未定 |
 | `frontmatterTable` | 真偽値（冒頭にプロパティの表を出す） | `false` | A-27 | 3a |
 

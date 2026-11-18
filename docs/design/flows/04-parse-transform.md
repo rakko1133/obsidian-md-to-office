@@ -285,3 +285,13 @@ flowchart LR
 - 埋め込んだノートの見出しは元のレベルのまま（ユーザー決定）。深さの上限は 5 で固定。循環参照と深さの超過はリンクとして残して警告する
 - Excalidraw は `名前.excalidraw.svg`・`名前.svg`（と .png）を同じフォルダで探し、なければ原文を残して警告する。Canvas は原文を残して警告する
 - Mermaid の連番は、埋め込みを展開した後の木全体で振る。埋め込んだノートの図も .docx に入る（画像ファイルの保存（`saveImageFiles`）は、そのノート自身の図だけ）
+
+## 決定済み（2026-11-18・フェーズ 3b）
+
+詳細は `docs/requirements.md` の「フェーズ 3b の決定事項」。
+
+- 構文解析に `remark-math` を足した（数式の `$…$` の中の `_` や `*` を強調にしないため）。数式のノード（`math`・`inlineMath`）は、組み立ての最後の準備で `latexToMath` にかけ、変換できない式だけ `renderMath`（MathJax の SVG）で画像にする
+- 描画依頼（サブフロー B）は、埋め込みの展開の後、Mermaid の連番とリンクの解決の前に行う。描画結果の中の内部リンク（`a.internal-link`）は Wikilink のノードにし、そのコードブロックがあったノートから解決する
+- 描画を頼む対象の判別は、ホスト関数 `renderableLanguage`（Obsidian に登録されたコードブロックの処理を問い合わせる）にした（「その他のプラグインのコードブロックの判別方法」を解決）
+- 描画結果は DOM のまま 04 には来ない。Obsidian 側が自作の変換（`src/core/dom-to-mdast.ts`: Obsidian 非依存、DOM の型にも依存しない）で mdast にしてから返す（「HTML → hast → mdast のライブラリと対応表」を解決: hast を経由しない）。Dataview も構造データではなく描画結果から取り込む（「Dataview の結果は HTML ではない」を解決）
+- SVG・canvas のラスタ化は Obsidian 側（描画の後片付けの前）で行う（「他プラグインの SVG のラスタ化」を解決）
