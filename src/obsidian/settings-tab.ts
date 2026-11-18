@@ -190,6 +190,29 @@ export class BatchOfficeExportSettingTab extends PluginSettingTab {
 				.setValue(s.calloutColorSource)
 				.onChange(async (v) => save("calloutColorSource", v as PluginSettings["calloutColorSource"])),
 		);
+
+		new Setting(containerEl).setName(t("settings.heading.excel")).setHeading();
+		new Setting(containerEl)
+			.setName(t("settings.excelBookUnit.name"))
+			.setDesc(t("settings.excelBookUnit.desc"))
+			.addDropdown((d) =>
+				d
+					.addOption("perFolder", t("settings.excelBookUnit.perFolder"))
+					.addOption("perNote", t("settings.excelBookUnit.perNote"))
+					.setValue(s.excelBookUnit)
+					.onChange(async (v) => save("excelBookUnit", v as PluginSettings["excelBookUnit"])),
+			);
+		new Setting(containerEl).setName(t("settings.excelSheetUnit.name")).addDropdown((d) =>
+			d
+				.addOption("perNote", t("settings.excelSheetUnit.perNote"))
+				.addOption("perTable", t("settings.excelSheetUnit.perTable"))
+				.setValue(s.excelSheetUnit)
+				.onChange(async (v) => save("excelSheetUnit", v as PluginSettings["excelSheetUnit"])),
+		);
+		new Setting(containerEl)
+			.setName(t("settings.excelAsTable.name"))
+			.setDesc(t("settings.excelAsTable.desc"))
+			.addToggle((tg) => tg.setValue(s.excelAsTable).onChange(async (v) => save("excelAsTable", v)));
 	}
 
 	override hide(): void {

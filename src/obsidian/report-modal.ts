@@ -72,7 +72,7 @@ function describeNote(r: NoteResult): string {
 
 function reasonText(reason: string): string {
 	const key = `reason.${reason}` as MessageKey;
-	return ["timeout", "noDiagrams", "inUse", "protected", "render", "exists"].includes(reason) ? t(key) : reason;
+	return ["timeout", "noDiagrams", "inUse", "protected", "render", "exists", "noTables"].includes(reason) ? t(key) : reason;
 }
 
 function describeWarning(w: Warning): string {
