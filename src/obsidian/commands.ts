@@ -76,6 +76,7 @@ export function registerCommands(plugin: BatchOfficeExportPlugin): void {
 	}
 }
 
-function pluginDir(plugin: BatchOfficeExportPlugin): string {
+/** プラグインのフォルダ（Vault からの相対パス）。 */
+export function pluginDir(plugin: BatchOfficeExportPlugin): string {
 	return plugin.manifest.dir ?? `${plugin.app.vault.configDir}/plugins/${plugin.manifest.id}`;
 }

@@ -113,31 +113,49 @@ function readStrictLineBreaks(app: App): boolean | undefined {
 
 let running = false;
 
-export async function runExport(host: ExportHost, mode: ExportMode, source: TargetSource): Promise<void> {
+/** 確認画面と結果画面を出さずに実行する（開発用の自動実行: dev-automation.ts）。 */
+export interface AutoRunOptions {
+	/** この実行だけに使う設定の上書き（保存しない） */
+	settings?: Partial<PluginSettings>;
+}
+
+export interface RunReport {
+	end: RunOutcomeEnd;
+	results: NoteResult[];
+	runWarnings: Warning[];
+}
+
+type RunOutcomeEnd = Awaited<ReturnType<typeof runSequential>>["end"];
+
+/**
+ * 書き出しを実行する。auto を渡すと、確認画面ではすべての候補を選んだことにし、結果画面を出さずに結果を返す。
+ * 実行しなかったとき（実行中・対象なし・取り消し）は null。
+ */
+export async function runExport(host: ExportHost, mode: ExportMode, source: TargetSource, auto?: AutoRunOptions): Promise<RunReport | null> {
 	if (running) {
 		new Notice(t("notice.alreadyRunning"));
-		return;
+		return null;
 	}
 	const { app } = host;
 	const definition = MODES[mode];
 	if (source.kind === "active" && !(app.workspace.getActiveFile()?.extension === "md")) {
 		new Notice(t("notice.noActiveNote"));
-		return;
+		return null;
 	}
 	const adapter = app.vault.adapter;
-	if (!(adapter instanceof FileSystemAdapter)) return; // isDesktopOnly なので通常は来ない
+	if (!(adapter instanceof FileSystemAdapter)) return null; // isDesktopOnly なので通常は来ない
 	// 実行中に設定が変わっても影響しないよう、写しを使う
-	const settings: PluginSettings = structuredClone(host.settings);
+	const settings: PluginSettings = { ...structuredClone(host.settings), ...structuredClone(auto?.settings ?? {}) };
 	if (settings.outputLocation === "external" && settings.saveMode === "mirror" && settings.externalOutputRoot === "") {
 		new Notice(t("notice.externalRootMissing"));
-		return;
+		return null;
 	}
 
 	// 01: 変換対象の収集
 	const { targets, excluded } = filterTargets(collectCandidates(app, source), settings.includeGlobs, settings.excludeGlobs);
 	if (targets.length === 0) {
 		new Notice(t("notice.noTargets", { excluded: String(excluded.length) }));
-		return;
+		return null;
 	}
 
 	running = true;
@@ -154,7 +172,7 @@ export async function runExport(host: ExportHost, mode: ExportMode, source: Targ
 			renderer = await createMermaidRenderer();
 		} catch (error) {
 			new Notice(t("notice.mermaidUnavailable", { error: String(error) }));
-			return;
+			return null;
 		}
 
 		const readNote = async (path: string): Promise<string> => {
@@ -178,14 +196,16 @@ export async function runExport(host: ExportHost, mode: ExportMode, source: Targ
 				: settings.outputLocation === "external"
 					? settings.externalOutputRoot
 					: `${settings.outputRoot}/`;
-		const selected = await confirmTargets(app, {
-			title: definition.title(),
-			targets,
-			excludedCount: excluded.length,
-			outputLabel,
-			plan: (path) => definition.plan(ctx, path),
-		});
-		if (!selected || selected.length === 0) return;
+		const selected = auto
+			? targets
+			: await confirmTargets(app, {
+					title: definition.title(),
+					targets,
+					excludedCount: excluded.length,
+					outputLabel,
+					plan: (path) => definition.plan(ctx, path),
+				});
+		if (!selected || selected.length === 0) return null;
 		ctx.selected = new Set(selected);
 		definition.start?.(ctx, selected);
 
@@ -219,7 +239,9 @@ export async function runExport(host: ExportHost, mode: ExportMode, source: Targ
 		}
 		await cache.evict().catch(() => undefined);
 
-		showReport(app, { end: outcome.end, results: outcome.results, runWarnings });
+		const report: RunReport = { end: outcome.end, results: outcome.results, runWarnings };
+		if (!auto) showReport(app, report);
+		return report;
 	} finally {
 		running = false;
 	}
