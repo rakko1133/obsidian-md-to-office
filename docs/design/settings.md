@@ -1,6 +1,6 @@
 # 設定の一覧
 
-最終更新: 2026-11-18
+最終更新: 2026-11-18（フェーズ 4a の Excel の設定を反映）
 段階: フェーズ 0 で作成（G5・完了条件 E1）。「実装」が 0 と 1 の項目はフェーズ 1 までに実装する。既定値はフェーズ 1 の決定事項（requirements.md）を反映済み
 
 - 設定値は `data.json` に保存する。型と既定値の実装は `src/core/settings.ts`、画面は `src/obsidian/settings-tab.ts`
@@ -17,7 +17,7 @@
 | `outputRoot` | Vault 内のフォルダのパス | `_export` | G4, R8 | 0 |
 | `externalOutputRoot` | Vault 外の絶対パス | 空（未設定） | G4 | 1 |
 | `saveMode` | `mirror`（ミラー出力）/ `sameFolder`（同一フォルダ） | `mirror` | R1, R8 | 1 |
-| `defaultFormat` | `word` / `excel` / `both` | `word` | R8 | 1 |
+| `defaultFormat` | `word` / `excel` / `both` | `word` | R8 | 4b（フェーズ 1 では作らなかった。確認画面で形式を選ぶのと一緒に作る） |
 | `onConflict` | `overwrite` / `skip` / `rename`（連番） | `overwrite` | R3 | 1 |
 | `onError` | `continue` / `failFast` | `continue` | R3 | 1 |
 | `timeoutSeconds` | 正の整数（秒） | `30` | R3 | 1 |
@@ -83,11 +83,11 @@ frontmatter の `export: false` による除外は常に有効で、設定は持
 
 | キー | 値 | 既定値 | 要件 | 実装 |
 |---|---|---|---|---|
-| `excelBookUnit` | `perFolder`（1 フォルダ = 1 ブック）/ `perNote`（1 ノート = 1 ブック） | `perFolder` | R8 | 4 |
-| `excelSheetUnit` | `perNote`（1 ノート = 1 シート）/ `perTable`（1 表 = 1 シート） | `perNote` | A-31, D-1 | 4 |
-| `excelOutlineMode` | 真偽値（アウトライン形式） | `false`（表だけを抜き出す） | A-30 | 4 |
-| `excelAsTable` | 真偽値（Excel テーブルとして出力） | `true` | D-3 | 4 |
-| `excelSourceColumns` | 真偽値（「元ノート」「見出し」の列を付ける） | `false`（集計では常に付ける） | D-5 | 4 |
+| `excelBookUnit` | `perFolder`（1 フォルダ = 1 ブック）/ `perNote`（1 ノート = 1 ブック） | `perFolder` | R8 | 4a |
+| `excelSheetUnit` | `perNote`（1 ノート = 1 シート）/ `perTable`（1 表 = 1 シート） | `perNote` | A-31, D-1 | 4a |
+| `excelOutlineMode` | 真偽値（アウトライン形式） | `false`（表だけを抜き出す） | A-30 | 4b |
+| `excelAsTable` | 真偽値（Excel テーブルとして出力） | `true` | D-3 | 4a |
+| `excelSourceColumns` | 真偽値（「元ノート」「見出し」の列を付ける） | `false`（集計では常に付ける） | D-5 | 4b |
 
 単一ノートの変換は `excelBookUnit` に関係なく `{ノート名}.xlsx` になる（R8: 実行する件数が 1 件のとき）。
 

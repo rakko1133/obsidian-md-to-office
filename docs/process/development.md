@@ -91,6 +91,19 @@ Obsidian を使う確認は自動化していない（G5）。テスト用 Vault
 - [ ] E1: 書き出した後、`_export/` の中に `.tmp` で終わるファイルがない。元のノートの更新日時が変わっていない
 - [ ] E2: 結果レポートに件数（成功・スキップ・失敗）と警告が出る。`phase1/folder-a/broken.md` は失敗、`no-diagram.md` はスキップになる。`test-vault/.obsidian/plugins/batch-office-export/export-manifest.json` に、`_export/...` の相対パスで記録されている
 
+## フェーズ 4a の手動確認（完了条件 A）
+
+準備: `npm run build:dev` → `npm run deploy:test-vault` → Obsidian でプラグインを無効 → 有効にする。サンプルは `test-vault/excel/`（5 本と、サブフォルダ `sub/`・埋め込み用の `parts/`）。フォルダ `excel` を右クリック →「Excel（.xlsx）に変換」。各 .xlsx を Excel で開くか、一覧ページ（`npm run preview:export`）で確かめる。
+
+- [x] 出力（2026-11-18 Claude が Obsidian で変換して確認）: `_export/excel/excel.xlsx`・`parts/parts.xlsx`・`sub/sub.xlsx` の 3 つ。`04-no-table` はスキップ（表がない）。確認画面と結果の件数は、ブックの数で数える
+- [x] 目次シート: 先頭にあり、各シートへのリンク・元ノート・見出し・表の数が並ぶ
+- [x] `01-types`: 数値・桁区切り・パーセント・通貨（¥・$・円）・日付・日時・真偽値が型と表示形式になり、郵便番号・電話番号・先頭ゼロ・16 桁の数字・混在の列は文字列のまま。見出し行で固定され、印刷は横向き
+- [x] `02-multi-tables`: 表が縦に並び、直前の見出し（コールアウトの中ではそのタイトル）が表題行になる。表ごとに別の Excel テーブル。空・重複の列名は「列1」「名前 (2)」
+- [x] `03-cell-format`: 太字・斜体・取り消し線、等幅のコード、セル内の改行、リンク（外部・同じブックのシート・`obsidian://`）、セルの中の画像（幅 200 px まで）。`=SUM(A1:A3)` は文字のまま
+- [x] `05-…`: シート名が 31 文字に切り詰められる
+- [ ] 設定を変えて確かめる: 「シートの単位」を「1 表 = 1 シート」、「ブックの単位」を「1 ノート = 1 ブック」、「Excel テーブルにする」をオフ（単体テストでは確認済み）
+- [ ] 確認の後、`npm run build` の本番ビルドに戻して配置する
+
 ## フェーズ 3b の手動確認（完了条件 A）
 
 準備: テスト用 Vault に Dataview プラグインを入れて有効にする（コミュニティプラグインから）。dataviewjs を確かめるには、Dataview の設定で「Enable JavaScript Queries」をオンにする（既定はオフ。オフのままなら dataviewjs は描画できなかったとして、コードのまま残って警告が出る）。`npm run build:dev`（テスト用のコードブロックの処理を登録する開発用ビルド）→ `npm run deploy:test-vault` → Obsidian でプラグインを無効 → 有効にする。サンプルは `test-vault/word3b/`（6 本と、Dataview の対象の `data/`）。フォルダ `word3b` を右クリック →「Word（.docx）に変換」。各 .docx を Word で開くか、一覧ページ（`npm run preview:export`）で確かめる。
