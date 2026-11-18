@@ -52,6 +52,11 @@ export const ja: Record<MessageKey, string> = {
 	"settings.authorName.desc": "文書プロパティに書き込みます。空なら空のままにします。",
 	"settings.strictLineBreaks.name": "厳密な改行（代わりの値）",
 	"settings.strictLineBreaks.desc": "Obsidian 本体の設定を読めなかったときだけ使います。オン: 単一の改行は空白になります。",
+	"settings.codeLineNumbers.name": "コードブロックに行番号を付ける",
+	"settings.keepComments.name": "コメントを Word のコメントとして残す",
+	"settings.keepComments.desc": "オフ: %%コメント%% を取り除きます。オン: Word の文書のコメントにします。",
+	"settings.frontmatterTable.name": "冒頭にプロパティの表を出す",
+	"settings.frontmatterTable.desc": "ノートのプロパティ（frontmatter）の表を本文の前に置きます。",
 
 	"menu.saveMermaid": "Mermaid 画像として保存",
 	"menu.convertWord": "Word（.docx）に変換",
@@ -116,4 +121,9 @@ export const ja: Record<MessageKey, string> = {
 	"warning.planChanged": "確認画面の後にファイルが変わっていました",
 	"warning.cacheFailed": "画像のキャッシュを使えませんでした",
 	"warning.unsupportedSyntax": "まだ変換に対応していないため、Markdown のまま残しました",
+	"warning.brokenLink": "リンク先のノートや見出しが見つからないため、文字だけを残しました",
+	"warning.embedCycle": "埋め込んだノートが自分自身を埋め込んでいるため、リンクとして残しました",
+	"warning.embedDepth": "ノートの埋め込みが深すぎる（5 段を超える）ため、リンクとして残しました",
+	"warning.imageFailed": "画像を読み込めませんでした",
+	"warning.unsupportedEmbed": "まだ変換に対応していない埋め込みのため、文字のまま残しました",
 };
