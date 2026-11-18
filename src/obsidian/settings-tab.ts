@@ -236,6 +236,24 @@ export class BatchOfficeExportSettingTab extends PluginSettingTab {
 			.setName(t("settings.defaultCombine.name"))
 			.setDesc(t("settings.defaultCombine.desc"))
 			.addToggle((tg) => tg.setValue(s.defaultCombine).onChange(async (v) => save("defaultCombine", v)));
+		new Setting(containerEl)
+			.setName(t("settings.wordTemplatePath.name"))
+			.setDesc(t("settings.wordTemplatePath.desc"))
+			.addText((tx) => tx.setValue(s.wordTemplatePath).onChange(async (v) => save("wordTemplatePath", v)));
+		new Setting(containerEl)
+			.setName(t("settings.headingNumbering.name"))
+			.setDesc(t("settings.headingNumbering.desc"))
+			.addToggle((tg) => tg.setValue(s.headingNumbering).onChange(async (v) => save("headingNumbering", v)));
+		new Setting(containerEl).setName(t("settings.pageBreakBeforeH1.name")).addToggle((tg) => tg.setValue(s.pageBreakBeforeH1).onChange(async (v) => save("pageBreakBeforeH1", v)));
+		new Setting(containerEl).setName(t("settings.tableFullWidth.name")).addToggle((tg) => tg.setValue(s.tableFullWidth).onChange(async (v) => save("tableFullWidth", v)));
+		new Setting(containerEl)
+			.setName(t("settings.figureCaptions.name"))
+			.setDesc(t("settings.figureCaptions.desc"))
+			.addToggle((tg) => tg.setValue(s.figureCaptions).onChange(async (v) => save("figureCaptions", v)));
+		new Setting(containerEl)
+			.setName(t("settings.tableCaptions.name"))
+			.setDesc(t("settings.tableCaptions.desc"))
+			.addToggle((tg) => tg.setValue(s.tableCaptions).onChange(async (v) => save("tableCaptions", v)));
 
 		new Setting(containerEl).setName(t("settings.heading.excel")).setHeading();
 		new Setting(containerEl)
