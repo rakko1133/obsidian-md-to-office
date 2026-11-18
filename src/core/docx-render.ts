@@ -602,11 +602,12 @@ class Renderer {
 			case "footnoteReference": {
 				const def = this.footnoteDefs.get(node.identifier);
 				if (!def) return [this.run(`[^${node.label ?? node.identifier}]`, format)];
-				let id = this.footnoteIds.get(node.identifier);
-				if (id === undefined) {
-					id = this.addFootnote(def.children as RootContent[]);
-					this.footnoteIds.set(node.identifier, id);
-				}
+				const seen = this.footnoteIds.get(node.identifier);
+				// Word は 1 つの脚注を 2 か所から参照（w:footnoteReference の重複）すると「ファイルが壊れている」として開かない。
+				// 2 回目以降は脚注参照のスタイルで番号の文字だけを置く。番号は本文での出現順に振るので、Word が表示する番号と一致する
+				if (seen !== undefined) return [new TextRun({ text: String(seen), style: "FootnoteReference", superScript: true })];
+				const id = this.addFootnote(def.children as RootContent[]);
+				this.footnoteIds.set(node.identifier, id);
 				return [new FootnoteReferenceRun(id)];
 			}
 			case "inlineFootnote":

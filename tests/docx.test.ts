@@ -459,8 +459,10 @@ describe("フェーズ 3a の要素", () => {
 	it("脚注とインライン脚注は Word の脚注（A-10）", async () => {
 		const zip = await convert("a[^1] b^[インライン] c[^1]\n\n[^1]: 定義");
 		const d = await doc(zip);
-		expect(d.match(/<w:footnoteReference w:id="1"\/>/g)).toHaveLength(2);
+		// 同じ脚注の 2 回目の参照は w:footnoteReference を重ねず（Word が開けなくなる）、同じ番号の上付き文字にする
+		expect(d.match(/<w:footnoteReference w:id="1"\/>/g)).toHaveLength(1);
 		expect(d).toContain('<w:footnoteReference w:id="2"/>');
+		expect(d).toMatch(/<w:rStyle w:val="FootnoteReference"\/>(?:(?!<\/w:r>).)*<w:vertAlign w:val="superscript"\/>(?:(?!<\/w:r>).)*<w:t[^>]*>1<\/w:t>/);
 		const notes = await xml(zip, "word/footnotes.xml");
 		expect(notes).toContain(">定義<");
 		expect(notes).toContain(">インライン<");
