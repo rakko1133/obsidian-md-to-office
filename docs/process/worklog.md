@@ -8,6 +8,16 @@
 
 ---
 
+## 2026-11-18 一覧ページで 3b と Mermaid の変換結果を確認
+
+- 対象: 18:44 に変換した `test-vault/_export`（Mermaid の黒塗りの修正 `2d904cb` を含むビルド）。一覧ページの PNG を Claude が見た
+- 問題なし: Mermaid の 23 図（黒く塗りつぶされたものはない）、3b の数式（分数・根号・総和・積分・極限・行列・場合分け・揃え・記号、コールアウトと表の中の数式）、テスト用の SVG と canvas の図、外部の画像（設定オフでリンク）、コールアウト。`word/`・`word3a/` も見た目の崩れはない
+- Dataview のブロックはコードのまま: テスト用 Vault に Dataview を入れていないため（想定どおり）。Dataview を入れた確認は残っている
+- 見つかった不具合: `\sideset` と `\genfrac` の式が画像にならず、LaTeX のまま残る
+  - 原因: Obsidian 1.15.1 に同梱の MathJax は CHTML 出力だけのビルドで、`MathJax.tex2svg` がない（`obsidian-1.15.1.asar` の中で `tex2svg` は 0 件、`tex2chtml` は 2 件）。`plugin-render.ts` の `renderMath` は常に「MathJax is not available」で失敗し、`mathFailed` に回る。単体テストは偽の DOM なので見つけられなかった
+  - 対応は未定（ユーザーに確認する）
+- 脚注の修正を入れた開発用ビルドを配置した。`_export` はまだ作り直していない
+
 ## 2026-11-18 変換結果を Word で開かずに確かめる一覧ページ
 
 - きっかけ: 手動確認で各 .docx を Word で 1 つずつ開くのが手間（ユーザー）
