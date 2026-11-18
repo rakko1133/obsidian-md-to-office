@@ -6,7 +6,7 @@
 
 幅を指定した外部の画像:
 
-![Wikipedia のロゴ|120](https://upload.wikimedia.org/wikipedia/commons/thumb/8/80/Wikipedia-logo-v2.svg/200px-Wikipedia-logo-v2.svg.png)
+![Wikipedia のロゴ|120](https://upload.wikimedia.org/wikipedia/commons/8/80/Wikipedia-logo-v2.svg)
 
 見つからない外部の画像（オンでもリンクのまま残って警告）:
 
