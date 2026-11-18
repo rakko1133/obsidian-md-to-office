@@ -6,11 +6,13 @@ import type { FileResult, NoteResult } from "../src/core/types";
 const ok = (notePath: string): NoteResult => ({ notePath, status: "success", files: [], warnings: [], deleted: [] });
 const failed = (notePath: string): NoteResult => ({ notePath, status: "failed", files: [], warnings: [], deleted: [], reason: "x" });
 const noYield = () => Promise.resolve();
+const timers = { set: (callback: () => void, ms: number) => setTimeout(callback, ms), clear: (handle: unknown) => clearTimeout(handle as ReturnType<typeof setTimeout>) };
 
 describe("runSequential", () => {
 	it("すべて順に処理し、進捗を通知する", async () => {
 		const progress: string[] = [];
 		const out = await runSequential({
+			timers,
 			notes: ["a.md", "b.md"],
 			processNote: async (p) => ok(p),
 			timeoutMs: 1000,
@@ -26,6 +28,7 @@ describe("runSequential", () => {
 
 	it("continue-on-error では失敗しても次へ進む", async () => {
 		const out = await runSequential({
+			timers,
 			notes: ["a.md", "b.md", "c.md"],
 			processNote: async (p) => (p === "b.md" ? failed(p) : ok(p)),
 			timeoutMs: 1000,
@@ -39,6 +42,7 @@ describe("runSequential", () => {
 
 	it("fail-fast では最初の失敗で止まる", async () => {
 		const out = await runSequential({
+			timers,
 			notes: ["a.md", "b.md", "c.md"],
 			processNote: async (p) => (p === "b.md" ? failed(p) : ok(p)),
 			timeoutMs: 1000,
@@ -52,6 +56,7 @@ describe("runSequential", () => {
 
 	it("例外は失敗として記録する", async () => {
 		const out = await runSequential({
+			timers,
 			notes: ["a.md"],
 			processNote: async () => {
 				throw new Error("boom");
@@ -67,6 +72,7 @@ describe("runSequential", () => {
 	it("タイムアウトしたら signal を abort し、失敗として次へ進む。遅れて返った結果は捨てる", async () => {
 		let aborted = false;
 		const out = await runSequential({
+			timers,
 			notes: ["slow.md", "b.md"],
 			processNote: (p, signal) =>
 				p === "slow.md"
@@ -91,6 +97,7 @@ describe("runSequential", () => {
 		let cancelled = false;
 		let sawAbort = false;
 		const out = await runSequential({
+			timers,
 			notes: ["a.md", "b.md", "c.md"],
 			processNote: async (p, signal) => {
 				if (p === "a.md") cancelled = true; // 処理中に中断ボタンが押された

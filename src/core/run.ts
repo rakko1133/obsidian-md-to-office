@@ -11,8 +11,15 @@ export interface RunOptions {
 	isCancelled: () => boolean;
 	/** 進捗（処理を始める直前に呼ぶ）。done は処理済みの件数 */
 	onProgress?: (done: number, total: number, notePath: string) => void;
-	/** イベントループに制御を返す（R3: UI を固めない）。既定は setTimeout(0) */
+	/** タイマー。Obsidian では window のもの（ポップアウトのウィンドウ対応）、テストでは Node.js のものを渡す */
+	timers: RunTimers;
+	/** イベントループに制御を返す（R3: UI を固めない）。既定は timers.set(…, 0) */
 	yieldToEventLoop?: () => Promise<void>;
+}
+
+export interface RunTimers {
+	set: (callback: () => void, ms: number) => unknown;
+	clear: (handle: unknown) => void;
 }
 
 export interface RunOutcome {
@@ -23,8 +30,8 @@ export interface RunOutcome {
 export const TIMEOUT_REASON = "timeout";
 
 export async function runSequential(options: RunOptions): Promise<RunOutcome> {
-	const { notes, processNote, timeoutMs, onError, isCancelled, onProgress } = options;
-	const yieldNow = options.yieldToEventLoop ?? (() => new Promise<void>((resolve) => setTimeout(resolve, 0)));
+	const { notes, processNote, timeoutMs, onError, isCancelled, onProgress, timers } = options;
+	const yieldNow = options.yieldToEventLoop ?? (() => new Promise<void>((resolve) => timers.set(resolve, 0)));
 	const results: NoteResult[] = [];
 
 	for (let i = 0; i < notes.length; i++) {
@@ -33,7 +40,7 @@ export async function runSequential(options: RunOptions): Promise<RunOutcome> {
 		onProgress?.(i, notes.length, notePath);
 		await yieldNow();
 
-		const result = await processWithTimeout(notePath, processNote, timeoutMs);
+		const result = await processWithTimeout(notePath, processNote, timeoutMs, timers);
 		results.push(result);
 		if (result.status === "failed" && onError === "failFast") return { results, end: "failFast" };
 	}
@@ -44,11 +51,12 @@ async function processWithTimeout(
 	notePath: string,
 	processNote: RunOptions["processNote"],
 	timeoutMs: number,
+	timers: RunTimers,
 ): Promise<NoteResult> {
 	const controller = new AbortController();
-	let timer: ReturnType<typeof setTimeout> | undefined;
+	let timer: unknown;
 	const timeout = new Promise<"timeout">((resolve) => {
-		timer = setTimeout(() => {
+		timer = timers.set(() => {
 			controller.abort(new Error(TIMEOUT_REASON));
 			resolve("timeout");
 		}, timeoutMs);
@@ -59,7 +67,7 @@ async function processWithTimeout(
 		// タイムアウトした後に遅れて返った結果は捨てる（R3）
 		return winner === "timeout" ? failedResult(notePath, TIMEOUT_REASON) : winner;
 	} finally {
-		clearTimeout(timer);
+		timers.clear(timer);
 	}
 }
 
