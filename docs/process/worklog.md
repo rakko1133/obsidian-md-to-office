@@ -8,6 +8,15 @@
 
 ---
 
+## 2026-11-18 同梱の MathJax でプラグインが読み込めない不具合を修正し、Obsidian で確認
+
+- 見つかったこと: ユーザーが変換し直しても `_export` が更新されなかった。Claude が Obsidian の画面を見て、プラグインの有効化で「読み込みに失敗しました」と出ることを確かめた。本体のウィンドウの開発者ツールのコンソールに `MathJax.loader.preLoad is not a function`（`mathjax-full/js/input/tex/AllPackages.js`）
+  - 原因: `AllPackages.js` は、グローバルに `MathJax` があると MathJax 自身の読み込み機構とみなして `MathJax.loader.preLoad` を呼ぶ。Obsidian には同梱の MathJax（CHTML 版）がグローバルにあり、その `loader` には `preLoad` がない。単体テストと Node.js での読み込みでは、グローバルの `MathJax` がないので起きなかった
+  - 修正: `AllPackages.js` を使わず、同じ一覧の TeX の拡張の設定ファイルを `math-svg.ts` で直接読み込む。グローバルの `MathJax` を見ているのは、使っているモジュールの中では `AllPackages.js` だけ
+  - 回帰テスト: `math-svg.ts` を esbuild でバンドルし、グローバルに `MathJax`（`loader` に `preLoad` がない）を置いた別の文脈で実行する。修正前のコードでは同じ例外で失敗することを確かめた（`vi.resetModules` では node_modules のモジュールが読み込み直されず、再現できなかった）
+- 確認: Obsidian でプラグインを有効にでき、Claude が `word3a`（15 件）と `word3b`（8 件）を変換した。失敗 0。警告は `\sideset`・`\genfrac` の画像化、`\undefinedcommand` は LaTeX のまま、Dataview が無効でコードのまま、で想定どおり。一覧ページで 63 ファイルすべてを Word で開けた（エラー 0）。脚注の 2 回目の参照が上付きの番号になり、`\sideset`・`\genfrac` が画像として出ることを画像で確かめた
+- 教訓: Obsidian の中だけで起きる問題（グローバルの状態、同梱のライブラリ）は単体テストで見えない。新しい依存を足したら、Obsidian で有効にできることを確かめてから変換を頼む
+
 ## 2026-11-18 数式の画像化を同梱の MathJax に切り替え
 
 - ユーザー決定: Obsidian 同梱の MathJax で数式を画像にできない問題は、MathJax を同梱して画像にする（ライセンスを確認した。Apache-2.0 で無料、再配布できる）
