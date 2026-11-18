@@ -110,8 +110,8 @@ Obsidian を使う確認は自動化していない（G5）。テスト用 Vault
 開発用の自動実行で確かめる。サンプルは `test-vault/combine/`（MOC `combine.md`、`order` 付きの 2 本、表と図の 1 本、サブフォルダ `sub/`）。
 
 - [x] 結合出力の見た目（2026-11-18 Claude が確認。テストと同じ部品で作った .docx を Word で描画）: 表紙（MOC の title / author / date、ヘッダー・フッターなし）、目次（開いたときに更新され、章と見出しとページ番号が入る）、章が並び順どおりで改ページ、ヘッダーのタイトル、フッターの「n / 総ページ数」、章ごとの脚注、章の間のリンク
-- [ ] Obsidian での結合出力: `npm run obsidian:run -- --mode docx --path combine --combine`（`--set combineOrder=moc --set coverPage=true --set headerTitle=true` も）。実際の Mermaid の図が章ごとに入る
-- [ ] 1 ノート = 1 .docx のフッターのページ番号: `--mode docx --path word/01-headings.md`
+- [x] Obsidian での結合出力（2026-11-18 Claude が自動実行で確認）: `npm run obsidian:run -- --mode docx --path combine --combine`（`--set combineOrder=moc --set coverPage=true --set headerTitle=true` も）。`combine.docx` と `sub/sub.docx` ができ、実際の Mermaid の図が章ごとに入る。別のフォルダのノートへのリンクは、マニフェストに記録があれば .docx への相対リンク
+- [x] 1 ノート = 1 .docx のフッターのページ番号（2026-11-18 Claude が確認）: `--mode docx --path word/01-headings.md` で「1 / 1」
 - [ ] 確認画面のチェックボックス「1 フォルダを 1 つの .docx にまとめる」（画面の確認。形式が Excel のときは出ない、変えると予定が `{フォルダ名}.docx` になる）
 
 ## フェーズ 4b の手動確認（完了条件 A）
