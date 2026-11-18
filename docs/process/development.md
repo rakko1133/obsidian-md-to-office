@@ -18,6 +18,7 @@
 | `npm run build` | 型チェックのあと本番ビルドを作る（圧縮あり、開発用のコマンドなし、末尾に同梱の依存のライセンス文）。`THIRD_PARTY_NOTICES.md` が古ければ止まる。`main.js` の大きさを表示する |
 | `npm run notices` | 本番ビルドに入る依存のライセンス文を `THIRD_PARTY_NOTICES.md` に書き直す。依存を足す・上げるたびに実行する（`npm run notices:check` は確かめるだけ） |
 | `npm run typecheck` | 型チェックだけをする |
+| `npm run lint` | Obsidian 公式の `eslint-plugin-obsidianmd` の推奨設定で `src/` を検査する（コミュニティプラグインの自動レビューと同じ観点）。リリースの前にエラーが 0 件であることを確かめる |
 | `npm test` | Vitest の単体テストを実行する |
 | `npm run deploy:test-vault` | ビルド結果（`main.js`・`manifest.json`）をテスト用 Vault のプラグインフォルダにコピーする |
 | `npm run preview:export` | `test-vault/_export` の .docx / .xlsx を PDF → PNG にし、基準画像と比べた一覧ページ `.preview/index.html` を作る |
@@ -81,7 +82,7 @@ Obsidian の中でしか確かめられない処理（Mermaid・描画の取り�
 Obsidian のコミュニティプラグインは、`manifest.json` の `version` と同じ名前の GitHub Release から `main.js`・`manifest.json`・`styles.css` を取得する。リポジトリの公開・push・Release の作成・申請は外部に公開する操作なので、ユーザーの指示を受けてから行う。
 
 1. `manifest.json`・`package.json` の `version` と `versions.json` を上げて `release: x.y.z` をコミットし、`main` にマージして注釈付きタグ `x.y.z` を付ける（`git-rules.md` の 4 章）
-2. `npm run notices:check` と `npm test` が通ることを確かめ、`npm run build` で本番ビルドを作る
+2. `npm run lint`（エラー 0 件）・`npm run notices:check`・`npm test` が通ることを確かめ、`npm run build` で本番ビルドを作る
 3. `git push origin main x.y.z`
 4. `gh release create x.y.z main.js manifest.json styles.css --title x.y.z --notes "<変更点>"`（初回はリポジトリを公開に切り替えてから: `gh repo edit --visibility public --accept-visibility-change-consequences`）
 5. 作業が終わったら `npm run build:dev` と `npm run deploy:test-vault` で、テスト用 Vault を開発用ビルドに戻す（本番ビルドには開発用の自動実行が入っていない）
@@ -92,7 +93,7 @@ Obsidian のコミュニティプラグインは、`manifest.json` の `version`
 2. プラグインを追加する（リポジトリ `rakko1133/obsidian-md-to-office`）。ディレクトリは既定のブランチの先頭の `manifest.json` を読み、その `version` の GitHub Release から配布物を取る
 3. 自動レビューの指摘が出たら、直して版を上げた Release を出す。エラーが残っている間は Obsidian からインストールできない
 
-自動レビューの前に、公式の ESLint プラグイン（`eslint-plugin-obsidianmd`）の推奨設定で `src/` を検査しておく。1.0.1 の時点ではプロジェクトの依存に入れておらず、作業用のフォルダに `eslint@9`・`eslint-plugin-obsidianmd`・`typescript-eslint@8`・`typescript@5` を入れ、推奨設定（`obsidianmd.configs.recommended`、`parserOptions.projectService: true`）で実行した。エラーは 0 件、警告 11 件（docx の `TextRun` の `bold` などを `String.prototype.bold` と取り違える誤検出、core のタイマー、設定画面の宣言的 API への移行）
+自動レビューの前に `npm run lint`（公式の ESLint プラグイン `eslint-plugin-obsidianmd` の推奨設定、`eslint.config.mjs`）で `src/` を検査しておく。1.0.1 の時点でエラーは 0 件、警告 11 件（docx の `TextRun` の `bold` などを `String.prototype.bold` と取り違える誤検出、core のタイマー、設定画面の宣言的 API への移行）
 
 ## フェーズ 0 の手動確認（完了条件 B1〜B4）
 
