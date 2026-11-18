@@ -102,7 +102,7 @@ for (const p of packages) {
 const content = lines.join("\n");
 
 if (process.argv.includes("--check")) {
-	const current = existsSync(OUT) ? readFileSync(OUT, "utf8") : "";
+	const current = existsSync(OUT) ? readFileSync(OUT, "utf8").replace(/\r\n/g, "\n") : "";
 	if (current !== content) {
 		console.error(`${OUT} is out of date. Run: node scripts/third-party-notices.mjs`);
 		process.exit(1);
