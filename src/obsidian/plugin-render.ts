@@ -65,7 +65,12 @@ async function renderBlock(app: App, lang: string, source: string, sourcePath: s
 		const fence = "`".repeat(Math.max(3, longest + 1));
 		await MarkdownRenderer.render(app, `${fence}${lang}\n${source}\n${fence}`, host, sourcePath, component);
 		await waitForQuiet(host, signal);
+		// Dataview のエラー（JavaScript のクエリが無効、クエリの誤りなど）は、描画できなかったとして原文を残し、その文を警告にする
+		const error = host.querySelector(".dataview-error");
+		if (error) throw new Error((error.textContent ?? "").trim() || "Dataview error");
 		if (isPlainCode(host)) return null;
+		// Dataview の表の見出しの後ろに小さく出る件数（`<span class="dataview small-text">2</span>`）は見出しの文字ではないので外す
+		for (const count of Array.from(host.querySelectorAll("th .dataview.small-text"))) count.remove();
 		return await domToMdast(host as unknown as DomNodeLike, { image: (el) => rasterize(el as unknown as Element) });
 	} finally {
 		component.unload();
