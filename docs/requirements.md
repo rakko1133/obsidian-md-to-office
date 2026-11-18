@@ -214,7 +214,7 @@ Claude 推奨（ユーザーが確認なしでの実装を指示）
 
 テスト用 Vault の `word3b/` に、数式（インライン・ブロック・行列・場合分け・aligned・変換できない式）、Dataview（TABLE・LIST・TASK・dataviewjs。Dataview はユーザーがテスト用 Vault に入れる）、テスト用のコードブロック、外部の画像、コールアウトのテーマ色のサンプルを置いて確かめる。
 
-- [x] A. 変換結果（2026-11-18 Claude が Obsidian を操作して確認。LibreOffice は手元にないため未確認）: 各 .docx が Word と LibreOffice で開ける。数式が Word の数式として編集でき、変換できない式は画像になって警告が出る。Dataview の TABLE は表、LIST はリスト、TASK はタスクの記号付きのリスト、dataviewjs の結果が入る。テスト用の処理の SVG と canvas が画像になる。設定がオンのとき外部の画像が埋め込まれる。`theme` のときコールアウトの色がテーマの色になる
+- [x] A. 変換結果（2026-11-18 Claude が Obsidian を操作して確認。LibreOffice は確認の対象外にした（G5 の .docx レンダラのテストの 2026-11-18 更新））: 各 .docx が Word と LibreOffice で開ける。数式が Word の数式として編集でき、変換できない式は画像になって警告が出る。Dataview の TABLE は表、LIST はリスト、TASK はタスクの記号付きのリスト、dataviewjs の結果が入る。テスト用の処理の SVG と canvas が画像になる。設定がオンのとき外部の画像が埋め込まれる。`theme` のときコールアウトの色がテーマの色になる
 - [x] B. 自動テスト: 数式の変換、HTML → mdast の変換（偽の DOM）、描画を頼む対象の判別の単体テストと、新しいサンプルのスナップショットテスト
 - [x] C. 記録とリポジトリ: A-11・A-24・G2 の記述を直す。フロー図 04・05・07 と作業記録に反映する。`feat/plugin-render` で作業し、手動で確認してからマージして、タグ `0.3.1` を付ける
 
@@ -299,6 +299,7 @@ Claude 推奨（ユーザーが確認なしでの実装を指示）
 - 依存ライブラリのライセンス確認（G1 の条件）: `docx`、`exceljs`、unified / remark 系、`picomatch`、Temml または MathJax など。新しく依存を足すたびに確認する
   - 評価で追記: `mathml2omml` のライセンスは **LGPL-3.0-or-later**（npm で確認）で、G1 の条件（MIT / Apache-2.0 等）に合わないため使わない。MathML → OMML の変換は A-11 のとおり別の方法をとる。Temml は MIT
 - .docx レンダラのテスト（評価で追記）: 生成した .docx を展開し、`word/document.xml` をスナップショットテストで比較する。あわせて、テスト用 Vault の変換結果を Word と LibreOffice で開けることを各フェーズの終わりに目視で確認する
+  - 2026-11-18 更新（ユーザー決定）: 手動確認の対象は **Word だけ**にする。LibreOffice は「確認していないが、開ける見込み」の位置づけとし、完了条件にも入れない。フェーズ 4 以降の完了条件は「Word（.xlsx は Excel）で開ける」と書く。それまでのフェーズの完了条件にある LibreOffice の記述は、当時の記録として残す
 - Obsidian に依存する部分のテスト（評価で追記）: Mermaid の描画や `MarkdownRenderer` を使う部分は Vitest では動かせない。テスト用 Vault での手動確認とし、確認する手順をチェックリストにする
 - 設定の一覧（評価で追記）: 設定項目が多いため、フェーズ 0 で「設定の一覧表（キー・既定値・関係する要件）」を `docs/design/settings.md` に作り、実装と設定画面の設計はそれに従う
 - Obsidian に同梱されたライブラリ（mermaid.js、MathJax、Prism）は、Obsidian の更新でバージョンが変わる前提で作る（R4 のキャッシュ判定にバージョンを含める）
