@@ -194,6 +194,30 @@ Claude 推奨（ユーザー承認）
 - [x] B. 自動テスト: 新しいサンプルのスナップショットテストと、変換の処理ごとの単体テスト。既存のスナップショットは 3a で変わる部分だけを見直して更新する
 - [x] C. 記録とリポジトリ: A-0a の記述を G2 に合わせて直す。git-rules のバージョンの表にフェーズ 3 の 2 段を書き足す。作業記録とフロー図に反映する。`feat/word-elements` で作業し、手動で確認してからマージし、タグ `0.3.0` を付ける
 
+### フェーズ 3b の決定事項（2026-11-18）
+
+ユーザー決定
+- 数式（A-11）: `remark-math`（MIT）を依存に足して `$…$`・`$$…$$` を構文解析し、docx ライブラリの `latexToMath`（`docx/math`、既存の依存）で Word の数式（OMML）にする。変換できない式は Obsidian 同梱の MathJax（`loadMathJax()`）で SVG（PNG の代替画像付き）にして警告する。MathJax も使えなければ LaTeX の原文を等幅で残す。LaTeX → MathML → OMML の経路と、MathML → OMML の自作は不要になった
+- Dataview（A-24）: `api.query()` は使わず、`dataview`・`dataviewjs`・他のプラグインのコードブロックを同じ方法（Obsidian に描画させた結果を取り込む）で扱う
+- 描画結果の HTML → mdast は自作の小さな変換にする（`hast-util-to-mdast` は使わない: G2 の検討事項を解決）
+
+Claude 推奨（ユーザーが確認なしでの実装を指示）
+- 描画を頼む対象: `dataview`・`dataviewjs` と、Obsidian にコードブロックの処理が登録されている言語（非公開の `MarkdownPreviewRenderer.codeBlockPostProcessors`。読めなければ dataview 系だけ）。`mermaid` は Mermaid の処理で扱う。Dataview が入っていなければ原文を等幅で残して警告する
+- 描画: 画面の外に置いた要素（document につなぐ）で `MarkdownRenderer.render()` を呼ぶ。0.5 秒続けて DOM が変わらなければ完了とみなし、1 依頼の上限は 10 秒（ノートのタイムアウトが先ならそこで打ち切る）。時間切れ・結果が `pre > code` だけ・空のときは原文を残して警告する
+- 取り込み: 表・リスト（タスクを含む）・段落・見出し・リンク（内部リンクは Wikilink と同じ解決）・強調・コード・画像を mdast にする。`svg` は SVG + PNG の代替画像、`canvas` は PNG、`img` は PNG にする。それ以外の要素は文字だけ残す
+- 外部の画像（A-20 のオプション）: 設定 `downloadExternalImages`（既定オフ）。オンなら `requestUrl` で取得して埋め込む（上限 20 MB）。失敗したらリンクにして警告する
+- コールアウトの色（A-6）: 設定 `calloutColorSource`（`fixed` 既定 / `theme`）。`theme` は画面の外の `.callout[data-callout=種類]` から `--callout-color` を読み、読めなければ固定の色
+- 副作用: dataviewjs や他のプラグインのコードの動作はこのプラグインでは保証できないことを、README（フェーズ 6）に書く
+- テスト: 他のプラグインのコードブロックは、開発用ビルドだけに登録するテスト用の処理（SVG と canvas を描く）で確かめる
+
+### フェーズ 3b の完了条件（2026-11-18・Claude 推奨）
+
+テスト用 Vault の `word3b/` に、数式（インライン・ブロック・行列・場合分け・aligned・変換できない式）、Dataview（TABLE・LIST・TASK・dataviewjs。Dataview はユーザーがテスト用 Vault に入れる）、テスト用のコードブロック、外部の画像、コールアウトのテーマ色のサンプルを置いて確かめる。
+
+- [ ] A. 変換結果: 各 .docx が Word と LibreOffice で開ける。数式が Word の数式として編集でき、変換できない式は画像になって警告が出る。Dataview の TABLE は表、LIST はリスト、TASK はタスクの記号付きのリスト、dataviewjs の結果が入る。テスト用の処理の SVG と canvas が画像になる。設定がオンのとき外部の画像が埋め込まれる。`theme` のときコールアウトの色がテーマの色になる
+- [ ] B. 自動テスト: 数式の変換、HTML → mdast の変換（偽の DOM）、描画を頼む対象の判別の単体テストと、新しいサンプルのスナップショットテスト
+- [ ] C. 記録とリポジトリ: A-11・A-24・G2 の記述を直す。フロー図 04・05・07 と作業記録に反映する。`feat/plugin-render` で作業し、手動で確認してからマージして、タグ `0.3.1` を付ける
+
 ---
 
 ## 未決事項（評価で追記・2026-11-17）
@@ -240,7 +264,7 @@ Claude 推奨（ユーザー承認）
   - Obsidian 独自記法のうち、既存の remark プラグインで足りるものと自作が必要なものの洗い出し
   - バンドルサイズ（esbuild でまとめた `main.js` の大きさ）
 - HTML を取り込む経路（評価で追記）
-  - A-0a・A-24・A-26 で Obsidian に描画させた結果（`MarkdownRenderer.render()`・dataviewjs など）は mdast ではなく HTML（DOM）で返る。そのため、変換段に「HTML → hast（`rehype` 系の HTML 構文木）→ mdast の独自ノード」へ変換する処理を1つ足す（`hast-util-to-mdast` などを検討）
+  - A-0a・A-24・A-26 で Obsidian に描画させた結果（`MarkdownRenderer.render()`・dataviewjs など）は mdast ではなく HTML（DOM）で返る。そのため、変換段に「HTML → hast（`rehype` 系の HTML 構文木）→ mdast の独自ノード」へ変換する処理を1つ足す（`hast-util-to-mdast` などを検討 → 2026-11-18 フェーズ 3b のユーザー決定で、hast を経由しない自作の DOM → mdast の変換にした）
   - Dataview などは `render()` が戻った後も非同期で描画を続ける。描画の完了を待つ方法（`MutationObserver` で変化が止まるまで待つ、上限時間付き）を要検証とする
 
 ### G3. 変換エンジン（確定 2026-11-17）
@@ -438,6 +462,7 @@ R1 で生成する Mermaid 画像の品質と、Word への埋め込み方法を
 - A-9 表: Word の表。見出し行を各ページで繰り返し（`w:tblHeader`）、列の揃え（`w:jc`）、セル内の書式と `<br>` を保持する。列幅は自動調整。罫線・網掛けは R6 の C-6
 - A-10 脚注（`[^1]`、インライン脚注 `^[...]`）: Word の脚注（`w:footnoteReference`）
 - A-11 数式（`$...$` / `$$...$$`）: Word のネイティブ数式（OMML: `m:oMath` / `m:oMathPara`）。LaTeX → MathML → OMML と変換する（要検証）。変換に失敗した式は MathJax の SVG 出力で画像化する
+  - 2026-11-18 フェーズ 3b のユーザー決定で更新: MathML を経由せず、docx ライブラリの `latexToMath` で LaTeX → OMML に直接変換する（下の「評価で更新」の経路は使わない）。構文解析は `remark-math`
   - 評価で更新: LaTeX → MathML は Obsidian 同梱の MathJax（`loadMathJax()`）を第一候補にし、依存を増やさない（だめなら Temml、MIT）。MathML → OMML は `mathml2omml` がライセンス（LGPL）で使えないため、MIT 等のライブラリを探すか、主要な要素（分数・上付き下付き・根号・行列など）に絞って自作する。めどが立たなければ、その時点でユーザーに相談する（代わりの案: 数式は画像化のみで v1 に入れ、OMML 化は後回し）
 - A-12 Mermaid: R1 のとおり画像で埋め込む。SVG を PNG の代替画像付き（`a:blip` + `asvg:svgBlip`）で埋め込む（要検証）
 
@@ -458,7 +483,8 @@ R1 で生成する Mermaid 画像の品質と、Word への埋め込み方法を
 - A-23 Canvas・Excalidraw: Excalidraw はプラグインが自動エクスポートした .svg / .png を使う。Canvas（JSON Canvas から自前で描画）は後回し
 
 ### 他プラグインの記法・メタデータ
-- A-24 Dataview: Dataview API（`api.query()`）で結果を構造データ（見出しと行）として受け取り、Word の表にする（要検証）。`dataviewjs` は描画結果の HTML から取り込む。Dataview が入っていなければ A-0b のとおり原文を残して警告
+- A-24 Dataview: Dataview API（`api.query()`）で結果を構造データ（見出しと行）として受け取り、Word の表にする（要検証）。`dataviewjs` は描画結果の HTML から取り込む。
+  - 2026-11-18 フェーズ 3b のユーザー決定で更新: `api.query()` は使わず、`dataview` も `dataviewjs`・A-26 と同じく Obsidian に描画させた結果（表・リスト）から取り込む。Dataview が入っていなければ A-0b のとおり原文を残して警告
 - A-25 インラインフィールド `key:: value`: テキストのまま残す
 - A-26 その他のプラグインのコードブロック（Tasks クエリ、Charts、PlantUML など）: Obsidian に描画させ、SVG か canvas が得られれば画像化する。得られなければ原文のまま残して警告を出す
 - A-27 frontmatter: 文書プロパティ（`docProps/core.xml` の `dc:title`・`dc:creator`・`cp:keywords`・`dcterms:created`）とユーザー設定プロパティ（`docProps/custom.xml`）に入れる。どのキーをどのプロパティに入れるかは設定で変更できる。オプション: 冒頭にプロパティの表を出す
