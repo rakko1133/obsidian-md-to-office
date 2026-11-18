@@ -37,15 +37,20 @@ export function serializeManifest(snapshot: ManifestSnapshot): string {
  */
 export function applyResults(snapshot: ManifestSnapshot, results: readonly NoteResult[], now: string): ManifestSnapshot {
 	const map = new Map<string, ManifestEntry>(snapshot.entries.map((e) => [refKey(e.output), e]));
+	/** 今回の実行で書いた出力 → 元ノート。束ねた出力（1 フォルダ = 1 ブック）では、すべての元ノートを記録する */
+	const sourcesThisRun = new Map<string, string[]>();
 	for (const note of results) {
 		for (const ref of note.deleted) map.delete(refKey(ref));
 		for (const file of note.files) {
 			if ((file.status !== "success" && file.status !== "unchanged") || !file.contentHash) continue;
 			const key = refKey(file.output);
 			const prev = map.get(key);
+			const sources = sourcesThisRun.get(key) ?? [];
+			if (!sources.includes(note.notePath)) sources.push(note.notePath);
+			sourcesThisRun.set(key, sources);
 			map.set(key, {
 				output: file.output,
-				sources: [note.notePath],
+				sources: [...sources],
 				kind: file.kind,
 				...(file.diagramIndex !== undefined ? { diagramIndex: file.diagramIndex } : {}),
 				contentHash: file.contentHash,
