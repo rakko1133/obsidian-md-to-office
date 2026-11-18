@@ -8,6 +8,20 @@
 
 ---
 
+## 2026-11-18 フェーズ 3b の手動確認（Dataview 以外）と、テーマのコールアウトの色の不具合の修正
+
+- Claude が Obsidian を画面操作して、3b の確認項目のうち Dataview を使わないものを確かめた
+  - 数式: Word が数式オブジェクト（OMath）として認識する（`01-math` で 11 個、`06-all-in-one` で 2 個）。画像になった 2 式は画像として入る
+  - 外部の画像: 設定をオンにして変換すると、Obsidian のロゴと幅 120 の Wikipedia のロゴが埋め込まれ、見つからない画像は警告になる
+  - サンプルの修正: Wikipedia のロゴのサムネイルの URL（`…/thumb/…/200px-…png`）は、Wikimedia が HTTP 400 を返すようになっていた（プラグインの問題ではない）。元の SVG の URL に変えた
+- 見つかった不具合: 設定「コールアウトの色」を「使っているテーマの色」にしても、色が読めず固定の色に戻っていた
+  - 原因: Obsidian 1.15 の `--callout-color` は色そのもの（`var(--color-blue)` → `#086ddd`）で、`color: var(--callout-color)` や `color-mix(in oklch, var(--callout-color) 10%, …)` で使われる。`readCalloutColor` は古い形式の `r, g, b` しか読めなかった
+  - 修正: CSS の色の値を 16 進 6 桁にする `src/core/css-color.ts`（`r, g, b`・`#…`・`rgb()`・`rgba()`・`color(srgb …)`）を足した。値がそのまま読めなければ（`color-mix(…)` など）、`color: var(--callout-color)` をブラウザに計算させた色を読む
+  - 確認: CSS スニペットで note を `#d600d6`、tip を `rgb(255, 140, 0)`、warning を `color-mix(…)` の緑にして変換し、その色になることを一覧ページで確かめた。単体テスト 171 件
+- 確認のために変えた設定（外部の画像・コールアウトの色）とスニペットは元に戻した
+- 残り: Dataview の確認（`02-dataview`・`06-all-in-one` の LIST。Dataview をテスト用 Vault に入れる必要がある）、LibreOffice での確認（手元にない）、本番ビルドに戻して配置、マージとタグ `0.3.1`
+- 気づいた点: 本番ビルドの main.js は 3.18 MB で、U3 で提案している目安（3 MB 以下、未決定）を超えている。大半は MathJax の SVG 出力のフォントデータ
+
 ## 2026-11-18 同梱の MathJax でプラグインが読み込めない不具合を修正し、Obsidian で確認
 
 - 見つかったこと: ユーザーが変換し直しても `_export` が更新されなかった。Claude が Obsidian の画面を見て、プラグインの有効化で「読み込みに失敗しました」と出ることを確かめた。本体のウィンドウの開発者ツールのコンソールに `MathJax.loader.preLoad is not a function`（`mathjax-full/js/input/tex/AllPackages.js`）
