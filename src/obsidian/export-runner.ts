@@ -350,6 +350,7 @@ export async function runExport(host: ExportHost, mode: ExportMode, source: Targ
 				onError: settings.onError,
 				isCancelled: progress.isCancelled,
 				onProgress: (done, total, path) => progress.update(done, total, path),
+				timers: { set: (callback, ms) => window.setTimeout(callback, ms), clear: (handle) => window.clearTimeout(handle as number) },
 			});
 			// 束ねる出力（1 フォルダ = 1 ブック）を完成させる。中断・fail-fast でも処理済みの分で完成させる
 			await definition.finish?.(ctx, outcome.results);

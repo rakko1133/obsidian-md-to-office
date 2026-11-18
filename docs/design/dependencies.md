@@ -9,13 +9,13 @@ G1 の条件: 配布物に含めるライブラリは、再配布できるライ
 | パッケージ | バージョン | ライセンス | 用途 | 要件 |
 |---|---|---|---|---|
 | `docx` | 9.15.4 | MIT | .docx の生成 | G3 |
-| `exceljs` | 4.4.0 | MIT | .xlsx の生成。esbuild は `browser` フィールドのビルド（`dist/exceljs.min.js`）を使う | G3 |
+| `exceljs` | 4.4.0 | MIT | .xlsx の生成。esbuild は `browser` フィールドのビルド（`dist/exceljs.min.js`）を使う。同梱の setImmediate の代替実装の古い IE 向けの経路（script 要素）と `new Function` の経路は、ビルド時に `scripts/patch-exceljs.mjs` で取り除く（1.0.2: コミュニティプラグインの自動レビュー対応） | G3 |
 | `unified` | 11.0.5 | MIT | 構文解析の枠組み（G2） | G2 |
 | `remark-parse` | 11.0.0 | MIT | Markdown → mdast（G2） | G2 |
 | `remark-gfm` | 4.0.1 | MIT | 表・取り消し線・タスク・URL の自動リンク・脚注 | R5 |
 | `remark-frontmatter` | 5.0.0 | MIT | frontmatter を本文から外す | R5 |
 | `remark-math` | 6.0.0 | MIT | 数式 `$…$`・`$$…$$` の構文解析（フェーズ 3b）。LaTeX → Word の数式は `docx` の `docx/math`（`latexToMath`）で行う | R5 |
-| `picomatch` | 4.0.7 | MIT | glob の判定（R2） | R2 |
+| `picomatch` | 4.0.7 | MIT | glob の判定（R2）。extglob の ReDoS（GHSA-fc5q-39xc-vjpf、修正版なし）を避けるため `noextglob: true` で使う（1.0.2） | R2 |
 | `fflate` | 0.8.3 | MIT | Word のテンプレート（.docx / .dotx）から styles.xml を取り出す、見出しの番号の定義を直す（C-1b・C-1c）。`docx` の依存としてすでに main.js に含まれていたもので、直接の依存にしてもサイズは増えない（ユーザー承認・2026-11-18） | R6 |
 | `mathjax-full` | 3.2.2 | Apache-2.0 | `latexToMath` で Word の数式にできない式を SVG にする（A-11 の代替）。Obsidian 同梱の MathJax は SVG を作れないため同梱する。main.js が約 1.7 MB 増える（大半は SVG 出力の TeX フォントの字形データ） | R5 |
 

@@ -66,9 +66,8 @@ function normalizeSvg(raw: string): { svg: string; plainSvg: string; width: numb
 	const plainSvg = new XMLSerializer().serializeToString(el);
 	// 白い背景: viewBox の全体を覆う矩形を最初の子にする（style の background-color を読まないアプリもあるため）
 	const [x, y] = viewBox.length === 4 ? viewBox : [0, 0];
-	const background = doc.createElementNS("http://www.w3.org/2000/svg", "rect");
-	for (const [k, v] of Object.entries({ x: String(x), y: String(y), width: String(width), height: String(height), fill: "#ffffff" })) background.setAttribute(k, v);
-	el.insertBefore(background, el.firstChild);
+	const background = createSvg("rect", { attr: { x, y, width, height, fill: "#ffffff" } });
+	el.insertBefore(doc.importNode(background, true), el.firstChild);
 	return { svg: new XMLSerializer().serializeToString(el), plainSvg, width, height };
 }
 

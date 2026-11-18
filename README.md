@@ -63,7 +63,7 @@ By default, outputs go to the `_export` folder in your vault, mirroring the fold
 - **Network use**: the plugin does not send your notes anywhere. It accesses the network only when **Word → Download external images** is turned on (off by default): images linked by URL (`![](https://…)`) are then downloaded (up to 20 MB each) and embedded. When it is off, such images become links.
 - **Files outside the vault**: the plugin reads and writes files outside the vault only when you set an external output folder or a template with an absolute path.
 - **Dataview**: to include the results of `dataview` / `dataviewjs` blocks, the plugin asks Obsidian to render them, the same way as when you open the note. This means `dataviewjs` code in the converted notes is executed, just as it is in reading view. The Dataview plugin must be installed for these blocks to be converted.
-- **Files the plugin keeps**: a record of past outputs (`export-manifest.json`) and a cache of rendered diagrams are stored in the plugin folder (`.obsidian/plugins/batch-office-export/`).
+- **Files the plugin keeps**: a record of past outputs (`export-record.json`) and a cache of rendered diagrams are stored in the plugin folder (`.obsidian/plugins/batch-office-export/`).
 - **Rendering**: Mermaid diagrams, math and code highlighting use Obsidian's own renderers, so the look follows your Obsidian version. Math that Word's equation format cannot express is embedded as an image rendered with the bundled MathJax.
 
 ## Building from source

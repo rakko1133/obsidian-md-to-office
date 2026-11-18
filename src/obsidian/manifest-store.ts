@@ -1,5 +1,5 @@
 // 出力マニフェストのファイルの読み書き（10・R3・D4）。形式と変換は src/core/manifest.ts。
-// 置き場所: {Vault}/.obsidian/plugins/batch-office-export/export-manifest.json
+// 置き場所: {Vault}/.obsidian/plugins/batch-office-export/export-record.json
 import { promises as fs } from "fs";
 import * as nodePath from "path";
 import { MANIFEST_FILE_NAME, parseManifest, serializeManifest } from "../core/manifest";

@@ -8,6 +8,14 @@
 
 ---
 
+## 2026-11-19 自動レビューへの対応（タグ 1.0.2）
+
+- ユーザーが community.obsidian.md に登録した。1.0.1 の自動レビューはエラー 2 件（「ZIP を展開して自分のファイルを書き換えている」「実行時に script 要素を作る」）。ほかに警告（core のタイマー、設定画面の宣言的 API、依存の脆弱性）と推奨（GitHub の artifact attestations、Vault の列挙、動的なコードの実行）。ネットワーク・ビルドの再現（main.js がバイト単位で一致）は合格
+- 原因はどちらも main.js の文字列の組み合わせだった: 記録のファイル名 `export-manifest.json` とライセンス文の見出しの `main.js`、exceljs の同梱ビルドの古い IE 向けの経路。記録のファイルを `export-record.json` に改名し、ライセンス文の見出しを変え、esbuild のプラグイン（`scripts/patch-exceljs.mjs`）で exceljs の該当経路を取り除いた
+  - 最初、esbuild の `onLoad` の filter に `[\/]` と書いたため一度も一致せず、パッチが効いていなかった（置き換えの数の検査も呼ばれないので通ってしまう）。filter は Go の正規表現で評価される。パス区切りを `.` で受ける形にした
+- 脆弱性の警告: picomatch は extglob を無効にした。uuid（v3/v5/v6 にバッファを渡すときだけ）と katex（main.js に入らない）は該当しない
+- 確認: 型チェック・テスト 265 件・`npm run lint`（エラー 0、警告 8）。本番ビルドで `createElement("script")`・`new Function`・`manifest.json`・`main.js` が 0 件。変更前後のビルドで Word・Excel の 96 ページが一致（Mermaid はキャッシュなし）。集計・Mermaid の保存も成功
+
 ## 2026-11-18 フェーズ 6 の公開（タグ 1.0.0・1.0.1）
 
 - ユーザーの指示（「公開まで進めて」）で、マージ・タグ `1.0.0`・push・リポジトリの公開・GitHub Release の作成を行った

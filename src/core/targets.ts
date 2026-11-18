@@ -1,5 +1,8 @@
 // 変換対象の絞り込み（01: 変換対象の収集・R2）。Obsidian API に依存しない。
 import picomatch from "picomatch";
+
+// extglob（+(a|b) など）は使わない。picomatch の extglob に ReDoS の脆弱性（GHSA-fc5q-39xc-vjpf、修正版なし）があるため（1.0.2）
+const GLOB_OPTIONS = { dot: true, noextglob: true } as const;
 import type { ExcludedTarget, TargetCandidate } from "./types";
 
 export interface FilterResult {
@@ -16,8 +19,8 @@ export interface FilterResult {
  * - 同じパスが複数回来たら 1 つにまとめる。どれか 1 つでも直接選ばれていれば直接選んだ扱い
  */
 export function filterTargets(candidates: readonly TargetCandidate[], includeGlobs: readonly string[], excludeGlobs: readonly string[]): FilterResult {
-	const isIncluded = includeGlobs.length === 0 ? () => true : picomatch([...includeGlobs], { dot: true });
-	const isExcluded = excludeGlobs.length === 0 ? () => false : picomatch([...excludeGlobs], { dot: true });
+	const isIncluded = includeGlobs.length === 0 ? () => true : picomatch([...includeGlobs], GLOB_OPTIONS);
+	const isExcluded = excludeGlobs.length === 0 ? () => false : picomatch([...excludeGlobs], GLOB_OPTIONS);
 
 	const merged = new Map<string, TargetCandidate>();
 	for (const c of candidates) {

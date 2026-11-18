@@ -27,7 +27,7 @@ flowchart LR
   Xlsx[".xlsx の生成<br/>(R7)"]
   Write["ファイルの書き込み<br/>出力パス決定・同名の扱い<br/>一時ファイル → rename<br/>(R8, R3)"]
   Log["実行結果の記録<br/>結果レポート・マニフェストの読み書き<br/>(R3)"]
-  Manifest[("export-manifest.json<br/>(R3)")]
+  Manifest[("export-record.json<br/>(R3)")]
 
   Collect -->|対象ノート一覧| Confirm
   Confirm -->|実行指示| Run

@@ -5,6 +5,7 @@
 import esbuild from "esbuild";
 import { builtinModules } from "node:module";
 import { existsSync, readFileSync, statSync } from "node:fs";
+import { patchExceljs } from "./scripts/patch-exceljs.mjs";
 
 const mode = process.argv[2];
 const prod = mode === "production";
@@ -14,7 +15,7 @@ const once = prod || mode === "once";
 // 配布物は main.js 単体で Vault に置かれるため（G1: MIT・Apache-2.0 はライセンス文の同梱を求める）
 const NOTICES = "THIRD_PARTY_NOTICES.md";
 const footer = prod && existsSync(NOTICES)
-	? { js: `/*! Batch Office Export bundles third-party packages. Their licenses follow.
+	? { js: `/*! This plugin bundles third-party packages. Their licenses follow.
 
 ${readFileSync(NOTICES, "utf8").replaceAll("*/", "* /")}
 */` }
@@ -53,6 +54,7 @@ const context = await esbuild.context({
 	treeShaking: true,
 	minify: prod,
 	footer,
+	plugins: [patchExceljs],
 	outfile: "main.js",
 });
 
