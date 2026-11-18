@@ -4,14 +4,44 @@
 import { liteAdaptor, type LiteAdaptor } from "mathjax-full/js/adaptors/liteAdaptor.js";
 import { RegisterHTMLHandler } from "mathjax-full/js/handlers/html.js";
 import { TeX } from "mathjax-full/js/input/tex.js";
-import { AllPackages } from "mathjax-full/js/input/tex/AllPackages.js";
 import { mathjax } from "mathjax-full/js/mathjax.js";
 import { SVG } from "mathjax-full/js/output/svg.js";
+// TeX の拡張。AllPackages.js は使わない: グローバルに MathJax があると MathJax.loader.preLoad を呼ぶが、
+// Obsidian のグローバルの MathJax（同梱の CHTML 版）にはそれがなく、プラグインの読み込みが失敗する。
+// 一覧は AllPackages.js と同じで、読めない命令を赤字で描く noerrors・noundefined だけを除く
+import "mathjax-full/js/input/tex/base/BaseConfiguration.js";
+import "mathjax-full/js/input/tex/action/ActionConfiguration.js";
+import "mathjax-full/js/input/tex/ams/AmsConfiguration.js";
+import "mathjax-full/js/input/tex/amscd/AmsCdConfiguration.js";
+import "mathjax-full/js/input/tex/bbox/BboxConfiguration.js";
+import "mathjax-full/js/input/tex/boldsymbol/BoldsymbolConfiguration.js";
+import "mathjax-full/js/input/tex/braket/BraketConfiguration.js";
+import "mathjax-full/js/input/tex/bussproofs/BussproofsConfiguration.js";
+import "mathjax-full/js/input/tex/cancel/CancelConfiguration.js";
+import "mathjax-full/js/input/tex/cases/CasesConfiguration.js";
+import "mathjax-full/js/input/tex/centernot/CenternotConfiguration.js";
+import "mathjax-full/js/input/tex/color/ColorConfiguration.js";
+import "mathjax-full/js/input/tex/colortbl/ColortblConfiguration.js";
+import "mathjax-full/js/input/tex/empheq/EmpheqConfiguration.js";
+import "mathjax-full/js/input/tex/enclose/EncloseConfiguration.js";
+import "mathjax-full/js/input/tex/extpfeil/ExtpfeilConfiguration.js";
+import "mathjax-full/js/input/tex/gensymb/GensymbConfiguration.js";
+import "mathjax-full/js/input/tex/html/HtmlConfiguration.js";
+import "mathjax-full/js/input/tex/mathtools/MathtoolsConfiguration.js";
+import "mathjax-full/js/input/tex/mhchem/MhchemConfiguration.js";
+import "mathjax-full/js/input/tex/newcommand/NewcommandConfiguration.js";
+import "mathjax-full/js/input/tex/upgreek/UpgreekConfiguration.js";
+import "mathjax-full/js/input/tex/unicode/UnicodeConfiguration.js";
+import "mathjax-full/js/input/tex/verb/VerbConfiguration.js";
+import "mathjax-full/js/input/tex/configmacros/ConfigMacrosConfiguration.js";
+import "mathjax-full/js/input/tex/tagformat/TagFormatConfiguration.js";
+import "mathjax-full/js/input/tex/textcomp/TextcompConfiguration.js";
+import "mathjax-full/js/input/tex/textmacros/TextMacrosConfiguration.js";
 
 /** MathJax の長さの単位 ex を px にする係数（1 ex ≒ 8 px で近似） */
 const PX_PER_EX = 8;
-/** 読めない命令を赤字で描く拡張は使わない（読めない式は例外にして、呼び出し側で LaTeX のまま残す） */
-const EXCLUDED_PACKAGES = new Set(["noerrors", "noundefined"]);
+/** 使う TeX の拡張（上で読み込んだもの） */
+const PACKAGES = ["base", "action", "ams", "amscd", "bbox", "boldsymbol", "braket", "bussproofs", "cancel", "cases", "centernot", "color", "colortbl", "empheq", "enclose", "extpfeil", "gensymb", "html", "mathtools", "mhchem", "newcommand", "upgreek", "unicode", "verb", "configmacros", "tagformat", "textcomp", "textmacros"];
 
 export interface MathSvg {
 	/** 単体で表示できる SVG（xmlns 付き、width / height は px） */
@@ -31,7 +61,7 @@ function documentForMath(): { adaptor: LiteAdaptor; doc: MathDocument } {
 		const adaptor = liteAdaptor();
 		RegisterHTMLHandler(adaptor);
 		const tex = new TeX({
-			packages: AllPackages.filter((p) => !EXCLUDED_PACKAGES.has(p)),
+			packages: PACKAGES,
 			// 構文の誤りは赤字の merror にせず例外にする
 			formatError: (_jax: unknown, error: Error) => {
 				throw error;
