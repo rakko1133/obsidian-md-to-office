@@ -8,6 +8,14 @@
 
 ---
 
+## 2026-11-18 フェーズ 3b 完了（タグ 0.3.1）
+
+- 完了条件 A〜C を確認した。A は Claude が Obsidian を画面操作して変換し、一覧ページで Word の描画を見て確かめた。LibreOffice は手元にないため未確認
+- `release: 0.3.1` → `feat/plugin-render` を main にマージ（`--no-ff`）→ 注釈付きタグ `0.3.1`。マージ後の main で本番ビルド（main.js 3.15 MB）とテスト 171 件が通ることを確認
+- 本番ビルドをテスト用 Vault に配置した。グローバルに `MathJax` がある条件で main.js を読み込めることは Node.js で確かめたが、Obsidian でプラグインを無効 → 有効にして読み込み直す確認はしていない（画面の操作が届かなかった）
+- 3b の途中で入れたもの: 変換結果の一覧ページ（`npm run preview:export`）、`mathjax-full` の同梱（main.js が 1.44 MB → 3.15 MB）
+- 次: フェーズ 4（Excel）。U3 の main.js の大きさの目安（3 MB 以下の提案、未決定）は、MathJax の同梱で超えたので、決めるときに合わせて見直す
+
 ## 2026-11-18 フェーズ 3b の Dataview の確認と、取り込みの不具合の修正
 
 - ユーザーの依頼で、Claude がテスト用 Vault に Dataview 0.5.68（blacksmithgu、コミュニティプラグインから）を入れて有効にした
