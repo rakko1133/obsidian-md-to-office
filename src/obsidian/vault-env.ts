@@ -6,6 +6,7 @@
 // - フェーズ 3b の描画依頼などは plugin-render.ts
 import { TFile, loadPrism, type App } from "obsidian";
 import { svgSize, type VaultEnvironment } from "../core/docx-export";
+import { resolveCssVariables } from "../core/svg-css";
 import type { CodeToken, ImageAsset } from "../core/obsidian-syntax";
 import { createPluginRenderer } from "./plugin-render";
 
@@ -42,7 +43,9 @@ export async function createVaultEnvironment(app: App): Promise<VaultEnvironment
 /** 画像のバイト列を、Word が扱える形式にする（描画結果・外部の画像でも使う）。 */
 export async function loadImage(bytes: Uint8Array, ext: string): Promise<ImageAsset> {
 	if (ext === "svg") {
-		const text = new TextDecoder().decode(bytes);
+		// Word は CSS 変数を解釈しないので、実際の値に置き換える（他のプラグインの描画結果の SVG など）
+		const text = resolveCssVariables(new TextDecoder().decode(bytes));
+		bytes = new TextEncoder().encode(text);
 		const img = await decode(new Blob([bytes as BlobPart], { type: "image/svg+xml" }));
 		const fromAttr = svgSize(text);
 		const width = img.naturalWidth || fromAttr.width;
