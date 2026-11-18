@@ -1,18 +1,49 @@
 // ノート 1 件を .docx にする（04 → 06 → 07 → 09 の流れ・フェーズ 2）と、そのドライラン（02）。
 // Obsidian API に依存しない。描画・キャッシュ・書き込みは引数の部品に任せる。
+import type { Root } from "mdast";
 import { renderDocx, type DiagramAsset } from "./docx-render";
-import { parseMarkdown, transformTree } from "./markdown";
-import { buildRenderSource, diagramHash, extractMermaidBlocks, type MermaidBlock, type MermaidRenderParams } from "./mermaid";
+import { mapFrontmatter } from "./frontmatter";
+import { visitMermaidCodes } from "./markdown";
+import { buildRenderSource, diagramHash, type MermaidBlock, type MermaidRenderParams } from "./mermaid";
 import { exportMermaidNote, renderParams, type MermaidExportDeps } from "./mermaid-export";
-import { joinPath, noteBaseName, outputDirFor, plannedAction } from "./output-plan";
+import { assembleNote, type NoteEnvironment } from "./note-assembly";
+import { joinPath, noteBaseName, outputDirFor, plannedAction, relativeUrl } from "./output-plan";
 import { setPngDpi } from "./png";
 import { aggregateStatus } from "./run";
 import type { PluginSettings } from "./settings";
 import type { FileResult, ManifestSnapshot, NoteResult, OutputRef, PlannedAction, Warning } from "./types";
 
+/** Vault の読み取り（Obsidian 側が実装する: フェーズ 3a）。 */
+export type VaultEnvironment = Omit<NoteEnvironment, "readNote" | "isConverted" | "docxLink"> & {
+	/** ノートの frontmatter（metadataCache: A-27） */
+	frontmatter?(path: string): Readonly<Record<string, unknown>> | undefined;
+};
+
 export interface DocxExportDeps extends MermaidExportDeps {
 	/** Obsidian の「厳密な改行」。読めなければ undefined（設定の値を使う: A-2） */
 	strictLineBreaks: boolean | undefined;
+	/** リンクの解決・画像の読み込み・コードの色付け。なければリンクはすべて文字だけになる */
+	vault?: VaultEnvironment;
+	/** 今回の実行の対象ノート（内部リンクの「変換対象」の範囲: A-18） */
+	convertedNotes?: ReadonlySet<string>;
+}
+
+const EMPTY_VAULT: VaultEnvironment = { resolveLink: () => null, fileExists: () => false, vaultName: "" };
+
+/** 変換対象のノート: 今回の対象と、マニフェストに .docx として記録されたノート（A-18）。 */
+export function convertedNotes(current: ReadonlySet<string> | undefined, manifest: ManifestSnapshot): Set<string> {
+	const out = new Set(current ?? []);
+	for (const entry of manifest.entries) if (entry.kind === "docx") for (const source of entry.sources) out.add(source);
+	return out;
+}
+
+/** 組み立てた木から Mermaid の図を取り出す（埋め込んだノートの図も含む。連番は markMermaid が付けたもの）。 */
+export function mermaidBlocksOf(tree: Root): MermaidBlock[] {
+	const blocks: MermaidBlock[] = [];
+	visitMermaidCodes(tree, (node) => {
+		if (node.data?.mermaidIndex !== undefined) blocks.push({ index: node.data.mermaidIndex, source: node.value });
+	});
+	return blocks;
 }
 
 export interface PlannedOutput {
@@ -79,13 +110,24 @@ export async function exportDocxNote(
 		warnings.push(...images.warnings.filter((w) => w.code !== "noDiagrams"));
 	}
 
-	const markdown = await deps.readNote(notePath);
-	const tree = parseMarkdown(markdown);
-	warnings.push(...transformTree(tree).warnings);
+	// 構文解析・変換・埋め込みの展開・リンクの解決・画像の準備（フェーズ 3a）
+	const vault = deps.vault ?? EMPTY_VAULT;
+	const ownOutput = docxOutputRef(notePath, settings);
+	const converted = convertedNotes(deps.convertedNotes, manifest);
+	const env: NoteEnvironment = {
+		...vault,
+		readNote: deps.readNote,
+		isConverted: (path) => converted.has(path),
+		docxLink: (target) => relativeUrl(ownOutput, docxOutputRef(target, settings)),
+	};
+	const assembled = await assembleNote(notePath, env, { keepComments: settings.keepCommentsAsWordComments });
+	const { tree } = assembled;
+	warnings.push(...assembled.warnings);
+	const fm = mapFrontmatter(vault.frontmatter?.(notePath));
 
 	const params = renderParams(settings);
 	const diagrams = new Map<number, DiagramAsset>();
-	for (const block of extractMermaidBlocks(markdown)) {
+	for (const block of mermaidBlocksOf(tree)) {
 		try {
 			diagrams.set(block.index, await diagramAsset(block, params, deps, signal));
 		} catch (error) {
@@ -99,8 +141,8 @@ export async function exportDocxNote(
 	if (signal.aborted) throw signal.reason instanceof Error ? signal.reason : new Error("aborted");
 	const bytes = new Uint8Array(
 		await renderDocx(tree, {
-			title: noteBaseName(notePath),
-			creator: settings.authorName,
+			title: fm.title ?? noteBaseName(notePath),
+			creator: fm.author ?? settings.authorName,
 			strictLineBreaks: deps.strictLineBreaks ?? settings.strictLineBreaksFallback,
 			fileNameAsTitle: settings.fileNameAsTitle,
 			page: { paperSize: settings.paperSize, orientation: settings.orientation, marginsMm: settings.marginsMm },
@@ -111,11 +153,15 @@ export async function exportDocxNote(
 				headingLatin: settings.headingFontLatin,
 			},
 			diagrams,
-			source: markdown,
+			source: assembled.source,
+			codeLineNumbers: settings.codeLineNumbers,
+			comments: assembled.comments,
+			properties: fm.properties,
+			...(settings.frontmatterTable ? { propertiesTable: fm.table } : {}),
 		}),
 	);
 
-	files.push(await writeWithConflictPolicy(docxOutputRef(notePath, settings), bytes, settings.onConflict, deps, signal));
+	files.push(await writeWithConflictPolicy(ownOutput, bytes, settings.onConflict, deps, signal));
 	return { notePath, status: aggregateStatus(files), files, warnings, deleted };
 }
 

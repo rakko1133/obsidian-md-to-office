@@ -1,15 +1,23 @@
 // .docx のレンダラ（07: .docx の生成・G2・G3・R5・R6）。mdast → docx ライブラリのオブジェクト → バイト列。
-// Obsidian API に依存しない。フェーズ 2 の範囲: 見出し・段落・改行・リスト・タスク・表・文字書式・Mermaid・引用・コード・水平線・外部リンク。
-// それ以外の記法は元の Markdown を等幅の段落で残す（A-0b）。
+// Obsidian API に依存しない。フェーズ 2 の範囲（見出し・段落・改行・リスト・タスク・表・文字書式・Mermaid・引用・コード・水平線・外部リンク）に、
+// フェーズ 3a の内部リンクとブックマーク・画像・コールアウト・コードの色付け・脚注・コメント・インライン HTML・改ページ・文書プロパティを足した。
+// それ以外の記法は元の Markdown を等幅で残す（A-0b）。
 import {
 	AlignmentType,
+	Bookmark,
 	BorderStyle,
+	CommentRangeEnd,
+	CommentRangeStart,
+	CommentReference,
 	Document,
 	ExternalHyperlink,
+	FootnoteReferenceRun,
 	HeadingLevel,
 	ImageRun,
+	InternalHyperlink,
 	LevelFormat,
 	Packer,
+	PageBreak as DocxPageBreak,
 	PageOrientation,
 	Paragraph,
 	ShadingType,
@@ -24,7 +32,9 @@ import {
 	type IParagraphOptions,
 	type ParagraphChild,
 } from "docx";
-import type { BlockContent, Code, Heading, List, ListItem, PhrasingContent, Root, RootContent, Table as MdTable } from "mdast";
+import type { BlockContent, Code, FootnoteDefinition, Heading, List, ListItem, PhrasingContent, Root, RootContent, Table as MdTable } from "mdast";
+import { walk } from "./markdown";
+import type { Callout, CodeToken, EmbedImage } from "./obsidian-syntax";
 
 export interface DiagramAsset {
 	svg: Uint8Array;
@@ -47,8 +57,17 @@ export interface FontSettings {
 	headingLatin: string;
 }
 
+/** 文書プロパティ（A-27）。 */
+export interface DocumentProperties {
+	keywords?: string;
+	/** 作成日時（dcterms:created） */
+	created?: Date;
+	/** ユーザー設定のプロパティ（docProps/custom.xml） */
+	custom?: { name: string; value: string }[];
+}
+
 export interface DocxRenderOptions {
-	/** 文書プロパティのタイトル（ノート名） */
+	/** 文書プロパティのタイトル（frontmatter の title、なければノート名） */
 	title: string;
 	/** 文書プロパティの作成者。空なら空のまま（OS のユーザー名は入れない: R3） */
 	creator: string;
@@ -62,6 +81,13 @@ export interface DocxRenderOptions {
 	diagrams: ReadonlyMap<number, DiagramAsset>;
 	/** 元の Markdown（未対応の記法を原文で残すため: A-0b） */
 	source: string;
+	/** コードの行番号（A-7 のオプション） */
+	codeLineNumbers?: boolean;
+	/** Word のコメントにするコメントの中身（A-16 のオプション）。commentMark の id が添字 */
+	comments?: readonly string[];
+	properties?: DocumentProperties;
+	/** 冒頭に出すプロパティの表（A-27 のオプション） */
+	propertiesTable?: readonly [string, string][];
 }
 
 /** 用紙の大きさ（mm、縦向き）。B5 は JIS B5。 */
@@ -76,6 +102,83 @@ const CODE_SHADING = { type: ShadingType.CLEAR, color: "auto", fill: "F2F2F2" };
 const HEADINGS = [HeadingLevel.HEADING_1, HeadingLevel.HEADING_2, HeadingLevel.HEADING_3, HeadingLevel.HEADING_4, HeadingLevel.HEADING_5, HeadingLevel.HEADING_6];
 const BULLETS = ["•", "◦", "▪"];
 const LIST_INDENT_TWIP = 360;
+const NO_BORDER = { style: BorderStyle.NONE, size: 0, color: "auto" };
+
+/** コールアウトの既定色（Obsidian の既定のテーマの色。A-6・フェーズ 3 の決定事項）。 */
+const CALLOUT_COLORS: Readonly<Record<string, string>> = (() => {
+	const groups: [string, string[]][] = [
+		["086DDD", ["note", "info", "todo"]],
+		["00BFBC", ["abstract", "summary", "tldr", "tip", "hint", "important"]],
+		["08B94E", ["success", "check", "done"]],
+		["EC7500", ["question", "help", "faq", "warning", "caution", "attention"]],
+		["E93147", ["failure", "fail", "missing", "danger", "error", "bug"]],
+		["7852EE", ["example"]],
+		["9E9E9E", ["quote", "cite"]],
+	];
+	const map: Record<string, string> = {};
+	for (const [color, types] of groups) for (const type of types) map[type] = color;
+	return map;
+})();
+
+/** コールアウトの色（未知の種類は note の色）。 */
+export function calloutColor(type: string): string {
+	return CALLOUT_COLORS[type] ?? CALLOUT_COLORS.note!;
+}
+
+/** 背景の淡い色（白と 10% だけ混ぜる）。 */
+export function lightColor(hex: string): string {
+	return [0, 2, 4]
+		.map((i) => {
+			const c = parseInt(hex.slice(i, i + 2), 16);
+			return Math.round(255 - (255 - c) * 0.1)
+				.toString(16)
+				.padStart(2, "0");
+		})
+		.join("")
+		.toUpperCase();
+}
+
+/** コードの色付けの配色（Prism のトークンの種類 → 色。A-7・フェーズ 3 の決定事項: 固定の配色）。 */
+const TOKEN_COLORS: Readonly<Record<string, string>> = {
+	comment: "6A737D",
+	prolog: "6A737D",
+	doctype: "6A737D",
+	cdata: "6A737D",
+	keyword: "D73A49",
+	atrule: "D73A49",
+	important: "D73A49",
+	rule: "D73A49",
+	string: "032F62",
+	char: "032F62",
+	"attr-value": "032F62",
+	regex: "032F62",
+	"template-string": "032F62",
+	url: "032F62",
+	number: "005CC5",
+	boolean: "005CC5",
+	constant: "005CC5",
+	symbol: "005CC5",
+	"attr-name": "005CC5",
+	property: "005CC5",
+	function: "6F42C1",
+	"class-name": "6F42C1",
+	tag: "22863A",
+	selector: "22863A",
+	inserted: "22863A",
+	deleted: "B31D28",
+	builtin: "E36209",
+	variable: "E36209",
+	namespace: "E36209",
+};
+
+/** トークンの色。内側の種類から順に配色を探す。 */
+export function tokenColor(types: readonly string[]): string | undefined {
+	for (let i = types.length - 1; i >= 0; i--) {
+		const color = TOKEN_COLORS[types[i]!];
+		if (color) return color;
+	}
+	return undefined;
+}
 
 /** 本文の領域の大きさ（CSS ピクセル）。画像を収める大きさ（R4・フェーズ 2 の決定事項）。 */
 export function bodyArea(page: PageSettings): { width: number; height: number } {
@@ -91,6 +194,17 @@ export function fitImage(width: number, height: number, area: { width: number; h
 	return { width: Math.max(1, Math.round(width * scale)), height: Math.max(1, Math.round(height * scale)) };
 }
 
+/** 埋め込む画像の大きさ（A-20）: `|300` は幅、`|300x200` は幅と高さ。指定がなければ元の大きさ。どちらも本文の領域に収める。 */
+export function imageSize(node: Pick<EmbedImage, "width" | "height">, natural: { width: number; height: number }, area: { width: number; height: number }): { width: number; height: number } {
+	let width = natural.width;
+	let height = natural.height;
+	if (node.width !== undefined) {
+		width = node.width;
+		height = node.height ?? (natural.width > 0 ? (node.width * natural.height) / natural.width : node.width);
+	}
+	return fitImage(width, height, area);
+}
+
 interface Format {
 	bold?: boolean;
 	italics?: boolean;
@@ -98,6 +212,10 @@ interface Format {
 	highlight?: boolean;
 	code?: boolean;
 	link?: boolean;
+	underline?: boolean;
+	superScript?: boolean;
+	subScript?: boolean;
+	color?: string;
 }
 
 /** 番号付きリストの定義（numbering.xml）を集める。開始番号ごとに定義を作り、リストごとに instance を変えて番号を振り直す（A-3）。 */
@@ -145,63 +263,129 @@ class NumberingRegistry {
 	}
 }
 
+type Block = Paragraph | Table;
+
 class Renderer {
 	readonly numbering = new NumberingRegistry();
+	/** Word の脚注（番号 → 中身）。参照された順に番号を振る（A-10） */
+	readonly footnotes: Record<string, { children: Paragraph[] }> = {};
+	private readonly footnoteDefs = new Map<string, FootnoteDefinition>();
+	private readonly footnoteIds = new Map<string, number>();
+	private nextFootnote = 1;
 	private readonly area: { width: number; height: number };
 
-	constructor(private readonly options: DocxRenderOptions) {
+	constructor(
+		private readonly options: DocxRenderOptions,
+		tree: Root,
+	) {
 		this.area = bodyArea(options.page);
+		walk(tree, (node) => {
+			if (node.type === "footnoteDefinition" && !this.footnoteDefs.has(node.identifier)) this.footnoteDefs.set(node.identifier, node);
+		});
 	}
 
-	blocks(nodes: readonly RootContent[], headingShift: number): (Paragraph | Table)[] {
-		return nodes.flatMap((node) => this.block(node, headingShift));
+	blocks(nodes: readonly RootContent[], headingShift: number): Block[] {
+		const out: Block[] = [];
+		for (const node of nodes) {
+			for (const block of this.block(node, headingShift)) {
+				// 表が続くと Word が 1 つの表にまとめるので、間に空の段落を入れる
+				if (block instanceof Table && out[out.length - 1] instanceof Table) out.push(new Paragraph({ children: [] }));
+				out.push(block);
+			}
+		}
+		return out;
 	}
 
-	private block(node: RootContent, headingShift: number): (Paragraph | Table)[] {
+	private block(node: RootContent, headingShift: number): Block[] {
 		if (node.data?.unsupported) return [this.original(node)];
 		switch (node.type) {
 			case "yaml":
+			case "footnoteDefinition":
 				return [];
 			case "heading":
 				return [this.heading(node, headingShift)];
 			case "paragraph":
-				return [new Paragraph({ children: this.inlines(node.children, {}) })];
+				return [new Paragraph({ children: this.bookmarked(node, this.inlines(node.children, {})) })];
 			case "list":
-				return this.list(node, 0);
+				return this.withBookmark(node, this.list(node, 0));
 			case "table":
-				return [this.table(node)];
+				return this.withBookmark(node, [this.table(node)]);
 			case "code":
 				return [this.code(node)];
 			case "blockquote":
-				return node.children.flatMap((child) => this.quoteBlock(child as BlockContent, headingShift));
+				return this.withBookmark(
+					node,
+					node.children.flatMap((child) => this.quoteBlock(child as BlockContent, headingShift)),
+				);
+			case "callout":
+				return this.withBookmark(node, [this.callout(node, headingShift)]);
 			case "thematicBreak":
 				return [new Paragraph({ border: { bottom: { style: BorderStyle.SINGLE, size: 6, color: "auto", space: 1 } }, children: [] })];
+			case "pageBreak":
+				return [new Paragraph({ children: [new DocxPageBreak()] })];
 			default:
 				return [this.original(node)];
 		}
 	}
 
+	/** ブックマークを付ける（A-19）。リンクされているノードだけが data.bookmark を持つ。 */
+	private bookmarked(node: RootContent, runs: ParagraphChild[]): ParagraphChild[] {
+		const id = node.data?.bookmark;
+		return id ? [new Bookmark({ id, children: runs })] : runs;
+	}
+
+	/** 段落でないブロックのブックマークは、直前の小さな段落に置く。 */
+	private withBookmark(node: RootContent, blocks: Block[]): Block[] {
+		const id = node.data?.bookmark;
+		if (!id) return blocks;
+		return [new Paragraph({ spacing: { before: 0, after: 0 }, children: [new Bookmark({ id, children: [] })] }), ...blocks];
+	}
+
 	private heading(node: Heading, shift: number): Paragraph {
 		const level = Math.min(6, node.depth + shift);
-		return new Paragraph({ heading: HEADINGS[level - 1]!, children: this.inlines(node.children, {}) });
+		return new Paragraph({ heading: HEADINGS[level - 1]!, children: this.bookmarked(node, this.inlines(node.children, {})) });
 	}
 
 	/** 引用の中の段落は「引用文」スタイル（A-5）。入れ子の見出しやリストはそのまま描く。 */
-	private quoteBlock(node: BlockContent, headingShift: number): (Paragraph | Table)[] {
-		if (node.type === "paragraph") return [new Paragraph({ style: "Quote", children: this.inlines(node.children, {}) })];
+	private quoteBlock(node: BlockContent, headingShift: number): Block[] {
+		if (node.type === "paragraph") return [new Paragraph({ style: "Quote", children: this.bookmarked(node, this.inlines(node.children, {})) })];
 		if (node.type === "blockquote") return node.children.flatMap((c) => this.quoteBlock(c as BlockContent, headingShift));
 		return this.block(node, headingShift);
 	}
 
-	private list(node: List, level: number): (Paragraph | Table)[] {
+	/** コールアウト（A-6）: 1 行 1 列の表。左の罫線を種類の色、背景を淡い色にし、先頭に種類名とタイトルを置く。 */
+	private callout(node: Callout, headingShift: number): Table {
+		const color = calloutColor(node.calloutType);
+		const title = new Paragraph({ spacing: { after: 60 }, children: this.inlines(node.title, { bold: true, color }) });
+		const body = this.blocks(node.children as RootContent[], headingShift);
+		// セルの最後は段落でなければならない
+		if (body.length === 0 || body[body.length - 1] instanceof Table) body.push(new Paragraph({ children: [] }));
+		return new Table({
+			width: { size: "100%", type: WidthType.PERCENTAGE },
+			rows: [
+				new TableRow({
+					children: [
+						new TableCell({
+							borders: { left: { style: BorderStyle.SINGLE, size: 24, color }, top: NO_BORDER, bottom: NO_BORDER, right: NO_BORDER },
+							shading: { type: ShadingType.CLEAR, color: "auto", fill: lightColor(color) },
+							margins: { top: 80, bottom: 80, left: 160, right: 160 },
+							children: [title, ...body],
+						}),
+					],
+				}),
+			],
+		});
+	}
+
+	private list(node: List, level: number): Block[] {
 		const lvl = Math.min(level, 8);
 		const isTaskList = node.children.some((item) => (item.checked !== null && item.checked !== undefined) || item.data?.taskSymbol);
 		const numbering = isTaskList ? null : node.ordered ? this.numbering.ordered(node.start ?? 1) : this.numbering.bullet();
 		return node.children.flatMap((item) => this.listItem(item, lvl, numbering));
 	}
 
-	private listItem(item: ListItem, level: number, numbering: { reference: string; instance: number } | null): (Paragraph | Table)[] {
-		const out: (Paragraph | Table)[] = [];
+	private listItem(item: ListItem, level: number, numbering: { reference: string; instance: number } | null): Block[] {
+		const out: Block[] = [];
 		const symbol = item.checked === true ? "☑" : item.checked === false ? "☐" : item.data?.taskSymbol;
 		const indent = { left: LIST_INDENT_TWIP * (level + 2), hanging: numbering ? LIST_INDENT_TWIP : 0 };
 		let first = true;
@@ -209,8 +393,9 @@ class Renderer {
 			if (child.type === "list") {
 				out.push(...this.list(child, level + 1));
 			} else if (child.type === "paragraph") {
-				const runs = this.inlines(child.children, {});
+				let runs = this.inlines(child.children, {});
 				if (first && symbol) runs.unshift(new TextRun(`${symbol} `));
+				runs = this.bookmarked(child, first ? this.bookmarked(item as unknown as RootContent, runs) : runs);
 				const options: IParagraphOptions =
 					first && numbering
 						? { numbering: { reference: numbering.reference, level, instance: numbering.instance }, children: runs }
@@ -240,33 +425,72 @@ class Renderer {
 					return AlignmentType.LEFT;
 			}
 		};
-		const twipWidth = Math.floor(((this.area.width / 96) * 1440) / columns);
-		const border = { style: BorderStyle.SINGLE, size: 4, color: "808080" };
 		const rows = node.children.map(
 			(row, r) =>
 				new TableRow({
 					tableHeader: r === 0,
 					children: Array.from({ length: columns }, (_, c) => {
 						const cell = row.children[c];
-						return new TableCell({
-							borders: { top: border, bottom: border, left: border, right: border },
-							...(r === 0 ? { shading: { type: ShadingType.CLEAR, color: "auto", fill: "D9D9D9" } } : {}),
-							children: [new Paragraph({ alignment: align(c), children: cell ? this.inlines(cell.children, r === 0 ? { bold: true } : {}) : [] })],
-						});
+						return this.gridCell([new Paragraph({ alignment: align(c), children: cell ? this.inlines(cell.children, r === 0 ? { bold: true } : {}) : [] })], r === 0);
 					}),
 				}),
 		);
+		return this.gridTable(rows, columns);
+	}
+
+	private gridCell(children: Paragraph[], header: boolean): TableCell {
+		const border = { style: BorderStyle.SINGLE, size: 4, color: "808080" };
+		return new TableCell({
+			borders: { top: border, bottom: border, left: border, right: border },
+			...(header ? { shading: { type: ShadingType.CLEAR, color: "auto", fill: "D9D9D9" } } : {}),
+			children,
+		});
+	}
+
+	private gridTable(rows: TableRow[], columns: number): Table {
+		const twipWidth = Math.floor(((this.area.width / 96) * 1440) / columns);
 		return new Table({ rows, layout: TableLayoutType.AUTOFIT, columnWidths: Array(columns).fill(twipWidth), width: { size: 0, type: WidthType.AUTO } });
 	}
 
-	/** コードブロック（A-7: 色付けなしの等幅 + 網掛け）。Mermaid は画像にする（A-12・R4）。 */
+	/** 冒頭のプロパティの表（A-27 のオプション）。 */
+	propertiesTable(entries: readonly [string, string][]): Table {
+		const rows = entries.map(
+			([key, value]) =>
+				new TableRow({
+					children: [this.gridCell([new Paragraph({ children: [new TextRun({ text: key, bold: true })] })], true), this.gridCell([new Paragraph({ children: [new TextRun(value)] })], false)],
+				}),
+		);
+		return this.gridTable(rows, 2);
+	}
+
+	/** コードブロック（A-7）: 色付けのトークンがあれば色を付ける。Mermaid は画像にする（A-12・R4）。 */
 	private code(node: Code): Paragraph {
 		const index = node.data?.mermaidIndex;
 		if (index !== undefined) {
 			const asset = this.options.diagrams.get(index);
 			if (asset) return this.diagram(asset, index);
 		}
-		return this.monospaceParagraph(node.value);
+		const tokens: CodeToken[] = node.data?.tokens ?? [{ text: node.value, types: [] }];
+		// 行ごとに、色と斜体の付いた断片に分ける
+		type Piece = { text: string; color?: string; italics?: boolean };
+		const lines: Piece[][] = [[]];
+		for (const token of tokens) {
+			const color = tokenColor(token.types);
+			const italics = token.types.includes("comment");
+			token.text.split("\n").forEach((part, i) => {
+				if (i > 0) lines.push([]);
+				if (part !== "") lines[lines.length - 1]!.push({ text: part, ...(color ? { color } : {}), ...(italics ? { italics } : {}) });
+			});
+		}
+		const width = String(lines.length).length;
+		const children: ParagraphChild[] = [];
+		lines.forEach((pieces, i) => {
+			if (this.options.codeLineNumbers) pieces.unshift({ text: `${String(i + 1).padStart(width)}  `, color: "A0A0A0" });
+			if (pieces.length === 0) pieces.push({ text: "" });
+			// 行の最初の断片に改行を付ける（色なしなら 1 行 = 1 つの w:r でフェーズ 2 と同じ形）
+			pieces.forEach((piece, k) => children.push(new TextRun({ ...piece, break: i > 0 && k === 0 ? 1 : 0 })));
+		});
+		return new Paragraph({ style: "SourceCode", children: this.bookmarked(node, children) });
 	}
 
 	private diagram(asset: DiagramAsset, index: number): Paragraph {
@@ -285,12 +509,23 @@ class Renderer {
 		});
 	}
 
+	/** 埋め込む画像（A-20）。読み込めなかった画像は元の記法を等幅で残す。 */
+	private image(node: EmbedImage): ParagraphChild {
+		const asset = node.data?.image;
+		if (!asset || (asset.type === "svg" && !asset.fallback)) return this.run(`![[${node.path}]]`, { code: true });
+		const transformation = imageSize(node, asset, this.area);
+		const altText = { name: node.alt, description: node.alt, title: node.alt };
+		if (asset.type === "svg") return new ImageRun({ type: "svg", data: asset.data, transformation, fallback: { type: "png", data: asset.fallback! }, altText });
+		return new ImageRun({ type: asset.type, data: asset.data, transformation, altText });
+	}
+
 	/** 未対応の記法を、元の Markdown のまま等幅の段落で残す（A-0b）。 */
 	private original(node: RootContent): Paragraph {
 		return this.monospaceParagraph(this.sourceOf(node));
 	}
 
 	private sourceOf(node: RootContent): string {
+		if (node.data?.original !== undefined) return node.data.original;
 		const start = node.position?.start.offset;
 		const end = node.position?.end.offset;
 		return start !== undefined && end !== undefined ? this.options.source.slice(start, end) : "";
@@ -321,19 +556,58 @@ class Renderer {
 				return this.inlines(node.children, { ...format, strike: true });
 			case "highlight":
 				return this.inlines(node.children, { ...format, highlight: true });
+			case "htmlFormat":
+				switch (node.tag) {
+					case "u":
+						return this.inlines(node.children, { ...format, underline: true });
+					case "sup":
+						return this.inlines(node.children, { ...format, superScript: true });
+					case "sub":
+						return this.inlines(node.children, { ...format, subScript: true });
+					default:
+						return this.inlines(node.children, { ...format, highlight: true });
+				}
 			case "inlineCode":
 				return [this.run(node.value, { ...format, code: true })];
 			case "break":
 				return [new TextRun({ break: 1 })];
 			case "link":
-				if (/^(https?:|mailto:)/i.test(node.url)) {
-					return [new ExternalHyperlink({ link: node.url, children: this.inlines(node.children, { ...format, link: true }) as TextRun[] })];
-				}
-				// 内部リンクはフェーズ 3 まで文字だけ残す
+				// リンクの解決（note-assembly.ts）の後に残る link は、どれもハイパーリンクにする
+				return [new ExternalHyperlink({ link: node.url, children: this.inlines(node.children, { ...format, link: true }) as TextRun[] })];
+			case "internalLink":
+				return [new InternalHyperlink({ anchor: node.anchor, children: this.inlines(node.children, { ...format, link: true }) })];
+			case "wikiLink":
+				// 解決されずに残ったリンクは表示文字だけ
 				return this.inlines(node.children, format);
+			case "embedImage":
+				return [this.image(node)];
+			case "footnoteReference": {
+				const def = this.footnoteDefs.get(node.identifier);
+				if (!def) return [this.run(`[^${node.label ?? node.identifier}]`, format)];
+				let id = this.footnoteIds.get(node.identifier);
+				if (id === undefined) {
+					id = this.addFootnote(def.children as RootContent[]);
+					this.footnoteIds.set(node.identifier, id);
+				}
+				return [new FootnoteReferenceRun(id)];
+			}
+			case "inlineFootnote":
+				return [new FootnoteReferenceRun(this.addFootnote([{ type: "paragraph", children: node.children }]))];
+			case "commentMark":
+				if (this.options.comments?.[node.id] === undefined) return [];
+				return [new CommentRangeStart(node.id), new CommentRangeEnd(node.id), new TextRun({ children: [new CommentReference(node.id)] })];
 			default:
 				return [this.run(this.sourceOf(node as RootContent), { ...format, code: true })];
 		}
+	}
+
+	/** 脚注を足して番号を返す。脚注の中は段落だけにできるので、表などは落とす。 */
+	private addFootnote(content: RootContent[]): number {
+		const id = this.nextFootnote++;
+		this.footnotes[String(id)] = { children: [] };
+		const paragraphs = this.blocks(content, 0).filter((b): b is Paragraph => b instanceof Paragraph);
+		this.footnotes[String(id)] = { children: paragraphs.length > 0 ? paragraphs : [new Paragraph({ children: [] })] };
+		return id;
 	}
 
 	/** 段落内の改行: 厳密な改行がオフなら w:br、オンなら空白（A-2）。 */
@@ -354,16 +628,21 @@ class Renderer {
 			...(format.highlight ? { highlight: "yellow" } : {}),
 			...(format.code ? { font: MONO_FONT, shading: CODE_SHADING } : {}),
 			...(format.link ? { style: "Hyperlink" } : {}),
+			...(format.underline ? { underline: {} } : {}),
+			...(format.superScript ? { superScript: true } : {}),
+			...(format.subScript ? { subScript: true } : {}),
+			...(format.color ? { color: format.color } : {}),
 		});
 	}
 }
 
 /** mdast（変換済み）から .docx を作る。 */
 export async function renderDocx(tree: Root, options: DocxRenderOptions): Promise<ArrayBuffer> {
-	const renderer = new Renderer(options);
+	const renderer = new Renderer(options, tree);
 	const shift = options.fileNameAsTitle ? 1 : 0;
-	const children: (Paragraph | Table)[] = [];
+	const children: Block[] = [];
 	if (options.fileNameAsTitle) children.push(new Paragraph({ heading: HeadingLevel.TITLE, children: [new TextRun(options.title)] }));
+	if (options.propertiesTable && options.propertiesTable.length > 0) children.push(renderer.propertiesTable(options.propertiesTable), new Paragraph({ children: [] }));
 	children.push(...renderer.blocks(tree.children, shift));
 
 	const { fonts, page } = options;
@@ -371,12 +650,21 @@ export async function renderDocx(tree: Root, options: DocxRenderOptions): Promis
 	const head = { ascii: fonts.headingLatin, hAnsi: fonts.headingLatin, cs: fonts.headingLatin, eastAsia: fonts.headingEastAsia };
 	const headingStyle = { run: { font: head } };
 	const paper = PAPER_MM[page.paperSize];
+	const comments = (options.comments ?? []).map((text, id) => ({
+		id,
+		author: options.creator,
+		children: text.split(/\n\s*\n/).map((p) => new Paragraph({ children: [new TextRun(p.replace(/\n/g, " "))] })),
+	}));
 
 	const doc = new Document({
 		creator: options.creator,
 		lastModifiedBy: options.creator,
 		title: options.title,
 		description: "",
+		...(options.properties?.keywords ? { keywords: options.properties.keywords } : {}),
+		...(options.properties?.custom && options.properties.custom.length > 0 ? { customProperties: options.properties.custom } : {}),
+		...(comments.length > 0 ? { comments: { children: comments } } : {}),
+		footnotes: renderer.footnotes,
 		styles: {
 			default: {
 				document: { run: { font: body } },
@@ -429,5 +717,30 @@ export async function renderDocx(tree: Root, options: DocxRenderOptions): Promis
 			},
 		],
 	});
-	return Packer.toArrayBuffer(doc);
+	const created = options.properties?.created;
+	const overrides = created ? [{ path: "docProps/core.xml", data: coreXml(options, created) }] : [];
+	return Packer.pack(doc, "arraybuffer", false, overrides);
+}
+
+function escapeXml(text: string): string {
+	return text.replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;").replace(/"/g, "&quot;");
+}
+
+/** 作成日時を入れた docProps/core.xml（docx ライブラリは作成日時を指定できないため、ファイルを差し替える: A-27）。 */
+export function coreXml(options: Pick<DocxRenderOptions, "title" | "creator" | "properties">, created: Date): string {
+	const w3cdtf = (d: Date) => d.toISOString().replace(/\.\d{3}Z$/, "Z");
+	const keywords = options.properties?.keywords;
+	return [
+		`<?xml version="1.0" encoding="UTF-8" standalone="yes"?>`,
+		`<cp:coreProperties xmlns:cp="http://schemas.openxmlformats.org/package/2006/metadata/core-properties" xmlns:dc="http://purl.org/dc/elements/1.1/" xmlns:dcterms="http://purl.org/dc/terms/" xmlns:dcmitype="http://purl.org/dc/dcmitype/" xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance">`,
+		`<dc:title>${escapeXml(options.title)}</dc:title>`,
+		`<dc:creator>${escapeXml(options.creator)}</dc:creator>`,
+		keywords ? `<cp:keywords>${escapeXml(keywords)}</cp:keywords>` : "",
+		`<dc:description></dc:description>`,
+		`<cp:lastModifiedBy>${escapeXml(options.creator)}</cp:lastModifiedBy>`,
+		`<cp:revision>1</cp:revision>`,
+		`<dcterms:created xsi:type="dcterms:W3CDTF">${w3cdtf(created)}</dcterms:created>`,
+		`<dcterms:modified xsi:type="dcterms:W3CDTF">${w3cdtf(new Date())}</dcterms:modified>`,
+		`</cp:coreProperties>`,
+	].join("");
 }

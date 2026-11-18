@@ -1,17 +1,19 @@
 import JSZip from "jszip";
-import { readdirSync, readFileSync } from "node:fs";
+import { readdirSync, readFileSync, statSync } from "node:fs";
 import { userInfo } from "node:os";
-import { join } from "node:path";
+import { join, relative } from "node:path";
 import { describe, expect, it } from "vitest";
-import { docxOutputRef, exportDocxNote, planDocxNote, svgSize, type DocxExportDeps } from "../src/core/docx-export";
-import { bodyArea, fitImage, renderDocx, type DiagramAsset, type DocxRenderOptions } from "../src/core/docx-render";
-import { parseMarkdown, transformTree } from "../src/core/markdown";
-import { extractMermaidBlocks } from "../src/core/mermaid";
-import { refKey } from "../src/core/output-plan";
+import { convertedNotes, docxOutputRef, exportDocxNote, mermaidBlocksOf, planDocxNote, svgSize, type DocxExportDeps, type VaultEnvironment } from "../src/core/docx-export";
+import { bodyArea, calloutColor, fitImage, imageSize, lightColor, renderDocx, tokenColor, type DiagramAsset, type DocxRenderOptions } from "../src/core/docx-render";
+import { assembleNote, type NoteEnvironment } from "../src/core/note-assembly";
+import type { CodeToken } from "../src/core/obsidian-syntax";
+import { refKey, relativeUrl } from "../src/core/output-plan";
 import { DEFAULT_SETTINGS, type PluginSettings } from "../src/core/settings";
+import type { Warning } from "../src/core/types";
 
-// D: テスト用 Vault の word/ のサンプルを .docx にして、word/document.xml をスナップショットで比べる（G5）
-const SAMPLE_DIR = join("test-vault", "word");
+// D: テスト用 Vault の word/ と word3a/ のサンプルを .docx にして、word/document.xml をスナップショットで比べる（G5）
+const VAULT_DIR = "test-vault";
+const SAMPLE_DIRS = ["word", "word3a"];
 const PNG_1x1 = Uint8Array.from(
 	atob("iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAIAAACQd1PeAAAADElEQVR4nGP4//8/AAX+Av4N70a4AAAAAElFTkSuQmCC"),
 	(ch) => ch.charCodeAt(0),
@@ -30,9 +32,9 @@ const baseOptions = (source: string, diagrams: Map<number, DiagramAsset>): DocxR
 });
 
 /** サンプル用の偽の図: 構文の誤った図（"not (((" を含む）は描画に失敗したことにする。大きさは図ごとに変える。 */
-function fakeDiagrams(markdown: string): Map<number, DiagramAsset> {
+function fakeDiagrams(blocks: { index: number; source: string }[]): Map<number, DiagramAsset> {
 	const map = new Map<number, DiagramAsset>();
-	for (const b of extractMermaidBlocks(markdown)) {
+	for (const b of blocks) {
 		if (b.source.includes("not (((")) continue;
 		const lines = b.source.split("\n").length;
 		const width = b.source.startsWith("flowchart LR") && lines < 3 ? 1400 : 400;
@@ -41,10 +43,83 @@ function fakeDiagrams(markdown: string): Map<number, DiagramAsset> {
 	return map;
 }
 
+/** テスト用 Vault のファイルの一覧（Vault からの相対パス）。 */
+function vaultFiles(dir = VAULT_DIR): string[] {
+	return readdirSync(dir).flatMap((name) => {
+		if (name.startsWith(".")) return [];
+		const full = join(dir, name);
+		return statSync(full).isDirectory() ? vaultFiles(full) : [relative(VAULT_DIR, full).split("\\").join("/")];
+	});
+}
+const FILES = vaultFiles();
+
+/** getFirstLinkpathDest の簡易版: パスの一致、拡張子 .md を補った一致、ファイル名の一致（同じフォルダを優先）。 */
+function fakeResolve(linkpath: string, source: string): string | null {
+	const exact = FILES.find((f) => f === linkpath || f === `${linkpath}.md`);
+	if (exact) return exact;
+	const name = linkpath.slice(linkpath.lastIndexOf("/") + 1);
+	const matches = FILES.filter((f) => {
+		const base = f.slice(f.lastIndexOf("/") + 1);
+		return base === name || base === `${name}.md`;
+	});
+	const dir = source.slice(0, source.lastIndexOf("/") + 1);
+	return matches.find((f) => f.startsWith(dir)) ?? matches[0] ?? null;
+}
+
+const KEYWORDS = new Set(["const", "let", "function", "return", "def", "if", "else", "true", "false"]);
+
+/** 偽の色付け: キーワード・文字列・コメントだけを見分ける。 */
+function fakeHighlight(code: string, lang: string): CodeToken[] | null {
+	if (!["ts", "js", "python", "json", "bash"].includes(lang)) return null;
+	const tokens: CodeToken[] = [];
+	for (const m of code.matchAll(/(\/\/[^\n]*)|("[^"\n]*")|([A-Za-z_]+)|([^A-Za-z_"/]+|\/)/g)) {
+		if (m[1]) tokens.push({ text: m[1], types: ["comment"] });
+		else if (m[2]) tokens.push({ text: m[2], types: ["string"] });
+		else if (m[3]) tokens.push({ text: m[3], types: KEYWORDS.has(m[3]) ? ["keyword"] : [] });
+		else tokens.push({ text: m[0], types: [] });
+	}
+	return tokens;
+}
+
+const fakeVault: VaultEnvironment = {
+	resolveLink: fakeResolve,
+	fileExists: (path) => FILES.includes(path),
+	vaultName: "test-vault",
+	loadImage: async (path) => {
+		const ext = path.slice(path.lastIndexOf(".") + 1);
+		if (ext === "svg") return { type: "svg", data: svgOf(240, 160), fallback: PNG_1x1, width: 240, height: 160 };
+		const large = path.includes("large");
+		return { type: ext === "jpg" ? "jpg" : "png", data: PNG_1x1, width: large ? 1600 : 640, height: large ? 900 : 400 };
+	},
+	highlight: fakeHighlight,
+	frontmatter: (path) =>
+		path.endsWith("08-frontmatter.md") ? { title: "frontmatter のタイトル", author: "山田 太郎", tags: ["sample", "phase3a"], created: "2026-11-18T09:30:00Z", status: "draft" } : undefined,
+};
+
+interface Converted {
+	zip: JSZip;
+	warnings: Warning[];
+}
+
+/** ノートを組み立てて .docx にする。path を指定しないときは、Vault に存在しないノート test.md として変換する。 */
+async function convertNote(markdown: string, overrides: Partial<DocxRenderOptions> = {}, path = "test.md", options = { keepComments: false }): Promise<Converted> {
+	const folder = path.slice(0, path.lastIndexOf("/") + 1);
+	const env: NoteEnvironment = {
+		...fakeVault,
+		readNote: async (p) => (p === path ? markdown : readFileSync(join(VAULT_DIR, p), "utf8")),
+		// 同じフォルダ（とその下）のノートを変換対象とみなす
+		isConverted: (p) => folder !== "" && p.startsWith(folder),
+		docxLink: (target) => relativeUrl(docxOutputRef(path, DEFAULT_SETTINGS), docxOutputRef(target, DEFAULT_SETTINGS)),
+	};
+	const assembled = await assembleNote(path, env, options);
+	const zip = await JSZip.loadAsync(
+		await renderDocx(assembled.tree, { ...baseOptions(assembled.source, fakeDiagrams(mermaidBlocksOf(assembled.tree))), comments: assembled.comments, ...overrides }),
+	);
+	return { zip, warnings: assembled.warnings };
+}
+
 async function convert(markdown: string, overrides: Partial<DocxRenderOptions> = {}): Promise<JSZip> {
-	const tree = parseMarkdown(markdown);
-	transformTree(tree);
-	return JSZip.loadAsync(await renderDocx(tree, { ...baseOptions(markdown, fakeDiagrams(markdown)), ...overrides }));
+	return (await convertNote(markdown, overrides)).zip;
 }
 
 const xml = async (zip: JSZip, path: string) => (await zip.file(path)?.async("string")) ?? "";
@@ -53,16 +128,23 @@ const xml = async (zip: JSZip, path: string) => (await zip.file(path)?.async("st
 const stable = (s: string) => s.replace(/r:id="rId[A-Za-z0-9_-]{10,}"/g, 'r:id="rIdLINK"').replace(/<wp:docPr id="\d+"/g, '<wp:docPr id="N"');
 
 describe("サンプルの word/document.xml（スナップショット）", () => {
-	for (const file of readdirSync(SAMPLE_DIR).filter((f) => f.endsWith(".md")).sort()) {
-		it(file, async () => {
-			const zip = await convert(readFileSync(join(SAMPLE_DIR, file), "utf8"));
-			expect(stable(await xml(zip, "word/document.xml"))).toMatchSnapshot();
-		});
+	for (const dir of SAMPLE_DIRS) {
+		for (const file of readdirSync(join(VAULT_DIR, dir)).filter((f) => f.endsWith(".md")).sort()) {
+			const path = `${dir}/${file}`;
+			// word/ のサンプルのテスト名は変えない（フェーズ 2 のスナップショットの名前を保つ）
+			it(dir === "word" ? file : path, async () => {
+				const { zip, warnings } = await convertNote(readFileSync(join(VAULT_DIR, path), "utf8"), {}, path);
+				expect(stable(await xml(zip, "word/document.xml"))).toMatchSnapshot();
+				if (dir !== "word") expect(warnings.map((w) => `${w.code}: ${w.detail ?? ""}`)).toMatchSnapshot();
+			});
+		}
 	}
 
 	it("同じ入力からは同じ document.xml ができる（スナップショットが安定する）", async () => {
-		const md = readFileSync(join(SAMPLE_DIR, "11-all-in-one.md"), "utf8");
-		expect(stable(await xml(await convert(md), "word/document.xml"))).toBe(stable(await xml(await convert(md), "word/document.xml")));
+		const path = "word3a/11-all-in-one.md";
+		const md = readFileSync(join(VAULT_DIR, path), "utf8");
+		const once = async () => stable(await xml((await convertNote(md, {}, path)).zip, "word/document.xml"));
+		expect(await once()).toBe(await once());
 	});
 });
 
@@ -113,12 +195,13 @@ describe("要素の変換", () => {
 		for (const tag of ["<w:b/>", "<w:i/>", "<w:strike/>", '<w:highlight w:val="yellow"/>', 'w:ascii="Consolas"']) expect(doc).toContain(tag);
 	});
 
-	it("外部リンクはハイパーリンク、内部リンクは文字だけ（A-17）", async () => {
-		const zip = await convert("[x](https://obsidian.md) [y](note.md)");
+	it("外部リンクはハイパーリンク、解決できない内部リンクは文字だけ（A-17・A-18）", async () => {
+		const { zip, warnings } = await convertNote("[x](https://obsidian.md) [y](note.md)");
 		expect(await xml(zip, "word/_rels/document.xml.rels")).toContain('Target="https://obsidian.md"');
 		const doc = await xml(zip, "word/document.xml");
 		expect(doc.match(/<w:hyperlink /g)).toHaveLength(1);
 		expect(doc).toContain(">y<");
+		expect(warnings).toEqual([{ code: "brokenLink", detail: "[y](note.md)" }]);
 	});
 
 	it("Mermaid は SVG と PNG フォールバックで埋め込む（A-12）", async () => {
@@ -134,14 +217,17 @@ describe("要素の変換", () => {
 		expect(doc).toContain("not ((( x");
 	});
 
-	it("未対応の記法は元の Markdown を等幅で残し、種類ごとに警告する（A-0b）", async () => {
-		const md = "![alt](a.png)\n\n<div>x</div>\n\n![b](b.png)";
-		const tree = parseMarkdown(md);
-		const ctx = transformTree(tree);
-		expect(ctx.warnings.map((w) => w.detail).sort()).toEqual(["html", "image"]);
-		const doc = await xml(await JSZip.loadAsync(await renderDocx(tree, baseOptions(md, new Map()))), "word/document.xml");
-		expect(doc).toContain("![alt](a.png)");
-		expect(doc).toContain("&lt;div&gt;x&lt;/div&gt;");
+	it("HTML のブロックはタグを除いて文字だけ残す（A-14）", async () => {
+		const { zip, warnings } = await convertNote("<div>x &amp; y</div>\n\n<!-- c -->");
+		const doc = await xml(zip, "word/document.xml");
+		expect(doc).toContain(">x &amp; y<");
+		expect(doc).not.toContain("div");
+		expect(warnings).toEqual([]);
+	});
+
+	it("参照形式のリンクは定義の URL のハイパーリンク", async () => {
+		const zip = await convert("[x][r]\n\n[r]: https://example.com");
+		expect(await xml(zip, "word/_rels/document.xml.rels")).toContain('Target="https://example.com"');
 	});
 
 	it("frontmatter は本文に出さない", async () => {
@@ -245,5 +331,161 @@ describe("exportDocxNote", () => {
 		expect(docxOutputRef("x/y.md", settings)).toEqual({ location: "vault", path: "_export/x/y.docx" });
 		const plans = await planDocxNote("x/y.md", settings, async () => true);
 		expect(plans).toEqual([{ output: { location: "vault", path: "_export/x/y.docx" }, action: "overwrite" }]);
+	});
+});
+
+describe("フェーズ 3a の要素", () => {
+	const doc = async (zip: JSZip) => xml(zip, "word/document.xml");
+
+	it("変換対象のノートへのリンクは出力した .docx への相対リンク、対象外は文字だけ（A-18）", async () => {
+		const { zip, warnings } = await convertNote("[[02-embed-notes|埋め込み]] [[01-headings]] [[parts/embed-source]]", {}, "word3a/x.md");
+		const rels = await xml(zip, "word/_rels/document.xml.rels");
+		expect(rels).toContain('Target="02-embed-notes.docx"');
+		expect(rels).toContain('Target="parts/embed-source.docx"');
+		expect(rels).not.toContain("01-headings");
+		expect(await doc(zip)).toContain(">01-headings<");
+		expect(warnings).toEqual([]);
+	});
+
+	it("同じノートの見出し・ブロックへのリンクはブックマークへのリンク（A-19）", async () => {
+		const zip = await convert("[[#節 B]] [[#^p1]]\n\n## 節 A\n\n## 節 B\n\n段落 ^p1");
+		const d = await doc(zip);
+		expect(d).toMatch(/<w:hyperlink [^>]*w:anchor="h_1"/);
+		expect(d).toContain('w:name="h_1"');
+		expect(d).toMatch(/<w:hyperlink [^>]*w:anchor="b_p1"/);
+		expect(d).toContain('w:name="b_p1"');
+		// リンクされていない見出しにはブックマークを付けない。^p1 の文字は消える
+		expect(d.match(/<w:bookmarkStart /g)).toHaveLength(2);
+		expect(d).toContain(">段落<");
+	});
+
+	it("ノートの埋め込み: 節だけを、見出しのレベルを保って取り込む（A-21）", async () => {
+		const d = await doc((await convertNote("![[embed-source#節 B]]", {}, "word3a/x.md")).zip);
+		expect(d).toContain("節 B の本文");
+		expect(d).toContain('<w:pStyle w:val="Heading3"/>');
+		expect(d).not.toContain("節 A の本文");
+		expect(d).not.toContain("節 C の本文");
+	});
+
+	it("循環参照は止めてリンクにし、警告する（A-21）", async () => {
+		const { zip, warnings } = await convertNote("![[cycle-a]]", {}, "word3a/x.md");
+		const d = await doc(zip);
+		expect(d).toContain("cycle-a の本文");
+		expect(d).toContain("cycle-b の本文");
+		expect(warnings.map((w) => w.code)).toEqual(["embedCycle"]);
+		expect(warnings[0]!.detail).toBe("word3a/x.md → word3a/parts/cycle-a.md → word3a/parts/cycle-b.md → word3a/parts/cycle-a.md");
+	});
+
+	it("画像: 大きさの指定と本文の幅への縮小、SVG は PNG の代替画像付き（A-20）", async () => {
+		const area = bodyArea(baseOptions("", new Map()).page);
+		expect(imageSize({ width: 200 }, { width: 640, height: 400 }, area)).toEqual({ width: 200, height: 125 });
+		expect(imageSize({ width: 300, height: 100 }, { width: 640, height: 400 }, area)).toEqual({ width: 300, height: 100 });
+		expect(imageSize({}, { width: 1600, height: 900 }, area).width).toBe(Math.round(area.width));
+		const zip = (await convertNote("![[sample-svg.svg]] ![[sample-png.png|代替|100]]", {}, "word3a/x.md")).zip;
+		const media = Object.keys(zip.files).filter((f) => f.startsWith("word/media/"));
+		expect(media.filter((f) => f.endsWith(".svg"))).toHaveLength(1);
+		expect(media.filter((f) => f.endsWith(".png")).length).toBeGreaterThanOrEqual(1);
+		expect(await doc(zip)).toContain('descr="代替"');
+	});
+
+	it("見つからない画像は文字で残して警告、外部 URL の画像はリンク（A-20）", async () => {
+		const { zip, warnings } = await convertNote("![[ない.png]] ![logo](https://example.com/a.png)", {}, "word3a/x.md");
+		expect(await doc(zip)).toContain("![[ない.png]]");
+		expect(await xml(zip, "word/_rels/document.xml.rels")).toContain('Target="https://example.com/a.png"');
+		expect(warnings).toEqual([{ code: "brokenLink", detail: "![[ない.png]]" }]);
+	});
+
+	it("PDF は obsidian://open のリンク、Canvas は文字のまま警告（A-22・A-23）", async () => {
+		const { zip, warnings } = await convertNote("![[sample.pdf]]\n\n![[sample-canvas.canvas]]", {}, "word3a/x.md");
+		expect(await xml(zip, "word/_rels/document.xml.rels")).toContain("obsidian://open?vault=test-vault&amp;file=word3a%2Fattachments%2Fsample.pdf");
+		expect(warnings.map((w) => w.code)).toEqual(["unsupportedEmbed"]);
+	});
+
+	it("コールアウトは左の罫線が種類の色、背景が淡い色の 1 行 1 列の表（A-6）", async () => {
+		expect(calloutColor("warning")).toBe("EC7500");
+		expect(calloutColor("whatever")).toBe("086DDD");
+		expect(lightColor("086DDD")).toBe("E6F0FC");
+		const d = await doc(await convert("> [!warning]- 題\n> 本文\n> > [!tip]\n> > 内側"));
+		expect(d).toMatch(/<w:left w:val="single" w:color="EC7500" w:sz="24"/);
+		expect(d).toContain('w:fill="FDF1E6"');
+		expect(d).toContain(">題<");
+		expect(d).toContain(">Tip<");
+		expect(d.match(/<w:tbl>/g)).toHaveLength(2);
+	});
+
+	it("コードはトークンの種類ごとに色を付け、行番号を付けられる（A-7）", async () => {
+		expect(tokenColor(["string", "keyword"])).toBe("D73A49");
+		expect(tokenColor(["unknown"])).toBeUndefined();
+		const d = await doc(await convert('```ts\nconst a = "x";\n```', { codeLineNumbers: true }));
+		expect(d).toContain('<w:color w:val="D73A49"/>');
+		expect(d).toContain('<w:color w:val="032F62"/>');
+		expect(d).toContain(">1  <");
+	});
+
+	it("脚注とインライン脚注は Word の脚注（A-10）", async () => {
+		const zip = await convert("a[^1] b^[インライン] c[^1]\n\n[^1]: 定義");
+		const d = await doc(zip);
+		expect(d.match(/<w:footnoteReference w:id="1"\/>/g)).toHaveLength(2);
+		expect(d).toContain('<w:footnoteReference w:id="2"/>');
+		const notes = await xml(zip, "word/footnotes.xml");
+		expect(notes).toContain(">定義<");
+		expect(notes).toContain(">インライン<");
+	});
+
+	it("コメントは消える。オプションで Word のコメントにする（A-16）", async () => {
+		const removed = await doc(await convert("a %%秘密%% b"));
+		expect(removed).not.toContain("秘密");
+		const zip = await convert("a %%秘密%% b");
+		expect(zip.file("word/comments.xml")).toBeNull();
+		const kept = await convertNote("a %%メモ%% b", {}, "test.md", { keepComments: true });
+		expect(await doc(kept.zip)).toContain('<w:commentReference w:id="0"/>');
+		expect(await xml(kept.zip, "word/comments.xml")).toContain(">メモ<");
+	});
+
+	it("インライン HTML の書式と改ページ（A-14・A-8）", async () => {
+		const d = await doc(await convert('<u>u</u> x<sup>2</sup> H<sub>2</sub> <mark>m</mark> <span>s</span>a<br>b\n\n<div style="page-break-after: always"></div>'));
+		expect(d).toContain('<w:u w:val="single"/>');
+		expect(d).toContain('<w:vertAlign w:val="superscript"/>');
+		expect(d).toContain('<w:vertAlign w:val="subscript"/>');
+		expect(d).toContain('<w:highlight w:val="yellow"/>');
+		expect(d).toContain('<w:br w:type="page"/>');
+		expect(d).not.toContain("span");
+	});
+
+	it("frontmatter を文書プロパティにする（A-27）", async () => {
+		const settings: PluginSettings = { ...DEFAULT_SETTINGS, authorName: "設定の作成者", frontmatterTable: true };
+		const files = new Map<string, Uint8Array>();
+		const deps: DocxExportDeps = {
+			strictLineBreaks: undefined,
+			readNote: async (p) => readFileSync(join(VAULT_DIR, p), "utf8"),
+			renderer: { version: "11", render: async () => ({ svg: "<svg/>", png: PNG_1x1 }) },
+			cache: { get: async () => null, put: async () => undefined },
+			writer: {
+				exists: async () => false,
+				write: async (ref, bytes) => {
+					files.set(refKey(ref), bytes);
+					return { status: "success", contentHash: "h" };
+				},
+				hashOf: async () => "h",
+				remove: async () => true,
+			},
+			vault: fakeVault,
+		};
+		await exportDocxNote("word3a/08-frontmatter.md", new AbortController().signal, settings, { entries: [] }, deps);
+		const zip = await JSZip.loadAsync(files.get("vault:_export/word3a/08-frontmatter.docx")!);
+		const core = await xml(zip, "docProps/core.xml");
+		expect(core).toContain("<dc:title>frontmatter のタイトル</dc:title>");
+		expect(core).toContain("<dc:creator>山田 太郎</dc:creator>");
+		expect(core).toContain("<cp:keywords>sample, phase3a</cp:keywords>");
+		expect(core).toContain('<dcterms:created xsi:type="dcterms:W3CDTF">2026-11-18T09:30:00Z</dcterms:created>');
+		expect(await xml(zip, "docProps/custom.xml")).toContain("draft");
+		expect(await doc(zip)).toContain(">status<");
+	});
+
+	it("相対 URL と変換対象の範囲", () => {
+		expect(relativeUrl({ location: "vault", path: "_export/a/b.docx" }, { location: "vault", path: "_export/c d/e#1.docx" })).toBe("../c%20d/e%231.docx");
+		expect(relativeUrl({ location: "vault", path: "x.docx" }, { location: "external", path: "y.docx" })).toBeNull();
+		const manifest = { entries: [{ output: { location: "vault" as const, path: "_export/p.docx" }, sources: ["p.md"], kind: "docx" as const, contentHash: "h", writtenAt: "t" }] };
+		expect([...convertedNotes(new Set(["a.md"]), manifest)].sort()).toEqual(["a.md", "p.md"]);
 	});
 });

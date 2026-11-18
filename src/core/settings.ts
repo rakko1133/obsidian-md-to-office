@@ -48,6 +48,12 @@ export interface PluginSettings {
 	/** 見出しのフォント（C-3） */
 	headingFontEastAsia: string;
 	headingFontLatin: string;
+	/** コードブロックに行番号を付ける（A-7） */
+	codeLineNumbers: boolean;
+	/** `%%…%%` を Word のコメントとして残す（A-16） */
+	keepCommentsAsWordComments: boolean;
+	/** 冒頭に frontmatter のプロパティの表を出す（A-27） */
+	frontmatterTable: boolean;
 }
 
 export const DEFAULT_SETTINGS: Readonly<PluginSettings> = {
@@ -75,6 +81,9 @@ export const DEFAULT_SETTINGS: Readonly<PluginSettings> = {
 	bodyFontLatin: "Century",
 	headingFontEastAsia: "游ゴシック",
 	headingFontLatin: "Arial",
+	codeLineNumbers: false,
+	keepCommentsAsWordComments: false,
+	frontmatterTable: false,
 };
 
 /**
@@ -112,6 +121,9 @@ export function normalizeSettings(raw: unknown): PluginSettings {
 		bodyFontLatin: text(data.bodyFontLatin, d.bodyFontLatin),
 		headingFontEastAsia: text(data.headingFontEastAsia, d.headingFontEastAsia),
 		headingFontLatin: text(data.headingFontLatin, d.headingFontLatin),
+		codeLineNumbers: bool(data.codeLineNumbers, d.codeLineNumbers),
+		keepCommentsAsWordComments: bool(data.keepCommentsAsWordComments, d.keepCommentsAsWordComments),
+		frontmatterTable: bool(data.frontmatterTable, d.frontmatterTable),
 	};
 }
 

@@ -96,3 +96,14 @@ export function findOldImages(manifest: ManifestSnapshot, notePath: string, diag
 		.map((e) => e.output)
 		.filter((ref) => !keepKeys.has(refKey(ref)));
 }
+
+/** 出力ファイルどうしの相対 URL（.docx の中の内部リンク: A-18）。空白・`%`・`#` だけを符号化する。 */
+export function relativeUrl(from: OutputRef, to: OutputRef): string | null {
+	if (from.location !== to.location) return null;
+	const fromDir = dirName(from.path).split("/").filter((s) => s !== "");
+	const toParts = to.path.split("/").filter((s) => s !== "");
+	let common = 0;
+	while (common < fromDir.length && common < toParts.length - 1 && fromDir[common] === toParts[common]) common++;
+	const parts = [...Array<string>(fromDir.length - common).fill(".."), ...toParts.slice(common)];
+	return parts.map((p) => p.replace(/%/g, "%25").replace(/ /g, "%20").replace(/#/g, "%23")).join("/");
+}
