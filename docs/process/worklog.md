@@ -8,6 +8,18 @@
 
 ---
 
+## 2026-11-18 画面を操作せずに Obsidian で確かめる仕組みと、フェーズ 4b の実装
+
+- きっかけ: Claude が Obsidian を画面操作している間、ユーザーが PC で他の作業をできない（ユーザー）
+- 作ったもの: 開発用ビルドだけに入る自動実行（`src/obsidian/dev-automation.ts`・`scripts/obsidian-run.mjs`・`npm run obsidian:run`）。テスト用 Vault のプラグインのフォルダに依頼ファイルを置くと、確認画面と結果画面を出さずに変換して結果をファイルに書く。`main.js` が変わったらプラグインが自分で読み込み直す。初回の有効化だけ画面を操作し、以降の 4b の確認はすべて画面を操作せずに行った
+- フェーズ 4b の決定事項（Claude 推奨・requirements.md）と実装（`feat/xlsx-summary`）
+  - アウトライン形式（`xlsx-outline.ts`）、「元ノート」「見出し」の列、Vault 全体の集計（`xlsx-summary.ts`。プロパティ・タスク・Dataview）、確認画面での出力形式の選択（Word / Excel / 両方）と「Office 形式に変換…」・設定 `defaultFormat`。「両方」の結果のまとめ方は `run.ts` の `mergeResults`
+  - 設定 3 項目（`excelOutlineMode`・`excelSourceColumns`・`defaultFormat`）。`defaultFormat` は設定一覧で「フェーズ 1」となっていたが作られていなかったので、ここで作った
+- 見つかった問題: アウトライン形式の .xlsx を Excel が開けなかった。XML の一部を外した版を作って比べ、exceljs が sheetPr の中の要素を仕様と逆の順番（pageSetUpPr → outlinePr）で書くことが原因と分かった。アウトライン形式では「幅を 1 ページに収める」を付けないことにした。あわせて、行に折りたたみ済みの印（collapsed）が付く問題も直した。どちらも回帰テストを足した（exceljs で読み直すだけのテストでは見つからなかった）
+- 決定事項の訂正: Tasks プラグインの優先度の記号（🔺 最高・⏫ 高・🔼 中・🔽 低・⏬ 最低）
+- 確認: 単体テスト 235 件（4b で 18 件）。開発用の自動実行でアウトライン形式・元ノートの列・集計・両方を Obsidian に変換させ、一覧ページで Excel の描画を確かめた
+- 残り: 確認画面の出力形式の選択の見た目（画面の確認）、本番ビルドに戻して配置、マージとタグ `0.4.1`
+
 ## 2026-11-18 フェーズ 4a 完了（タグ 0.4.0）
 
 - 完了条件 A〜C を確認した。A は Claude が Obsidian を画面操作して変換し、Excel で開いて確かめた。設定を変えたとき（1 表 = 1 シート・1 ノート = 1 ブック・Excel テーブルにしない）も確かめ、設定は既定に戻した

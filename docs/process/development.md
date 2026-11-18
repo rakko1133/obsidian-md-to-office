@@ -21,6 +21,7 @@
 | `npm run deploy:test-vault` | ビルド結果（`main.js`・`manifest.json`）をテスト用 Vault のプラグインフォルダにコピーする |
 | `npm run preview:export` | `test-vault/_export` の .docx / .xlsx を PDF → PNG にし、基準画像と比べた一覧ページ `.preview/index.html` を作る |
 | `npm run preview:approve` | 今回の PNG を基準画像（`.preview/baseline/`）として登録する |
+| `npm run obsidian:run -- --mode xlsx --path excel` | 開いている Obsidian（開発用ビルド）に変換を頼み、結果を表示する。画面は操作しない（下の「画面を操作せずに Obsidian で確かめる」） |
 
 ## ソースの構成
 
@@ -44,6 +45,18 @@
 
 - `test-vault/.obsidian/` の中は、`community-plugins.json`（プラグインを有効にする設定）以外は Git の管理対象外にしている
 - このリポジトリのルートも Obsidian の Vault として開いている場合、`test-vault/` のノートもルートの Vault に表示される。気になるときは、ルートの Vault の 設定 → ファイルとリンク → 除外するファイル に `test-vault/` を足す
+
+## 画面を操作せずに Obsidian で確かめる（開発用の自動実行）
+
+Obsidian の中でしか確かめられない処理（Mermaid・描画の取り込み・実際の変換）を、画面を操作せずに試す。Claude Code が確認している間も、PC で他の作業ができる。開発用ビルド（`npm run build:dev`）にだけ入り、本番ビルドには入らない（`src/obsidian/dev-automation.ts`）。
+
+1. Obsidian でテスト用 Vault を開いておく（後ろや最小化でよい）。初回だけ、開発用ビルドを配置してからプラグインを無効 → 有効にする
+2. `npm run build:dev` → `npm run deploy:test-vault`。プラグインが `main.js` の変化に気づいて、自分で読み込み直す（数秒）
+3. `npm run obsidian:run -- --mode xlsx --path excel`（`--mode` は `mermaid` / `docx` / `xlsx`、`--path` は複数可で空文字は Vault 全体、`--set excelSheetUnit=perTable` でこの実行だけ設定を変える）
+4. 確認画面と結果画面は出さずに変換し、結果（ノートごとの状態・出力ファイル・警告）を表示する。続けて `npm run preview:export` で見た目を確かめる
+
+- 仕組み: プラグインのフォルダ（`test-vault/.obsidian/plugins/batch-office-export/`）に `dev-request.json` を置くと、プラグインが 1 秒ごとに見つけて実行し、`dev-result.json` に結果を書く。読み込んだときに `dev-status.json`（読み込んだ日時・`main.js` の更新日時）を書く。`--wait-reload` は読み込み直しを待つだけ
+- 設定の上書きはその実行だけで、保存しない
 
 ## 変換結果を Word で開かずに確かめる（一覧ページ）
 
@@ -90,6 +103,17 @@ Obsidian を使う確認は自動化していない（G5）。テスト用 Vault
 - [ ] D4: 書き出した後も、Obsidian のプレビューの Mermaid の表示（テーマ・フォント）が書き出す前と同じ。`phase1/user-directive.md` のプレビューは dark のまま、書き出した画像は neutral になる
 - [ ] E1: 書き出した後、`_export/` の中に `.tmp` で終わるファイルがない。元のノートの更新日時が変わっていない
 - [ ] E2: 結果レポートに件数（成功・スキップ・失敗）と警告が出る。`phase1/folder-a/broken.md` は失敗、`no-diagram.md` はスキップになる。`test-vault/.obsidian/plugins/batch-office-export/export-manifest.json` に、`_export/...` の相対パスで記録されている
+
+## フェーズ 4b の手動確認（完了条件 A）
+
+開発用の自動実行で確かめる（画面は操作しない）。`npm run build:dev` → `npm run deploy:test-vault` → 次のコマンド → `npm run preview:export`。
+
+- [x] アウトライン形式（2026-11-18 Claude が確認）: `npm run obsidian:run -- --mode xlsx --path excel/outline --set excelOutlineMode=true`。見出しが H1・H2・H3 の列に分かれ、H4 とコードは本文の列。リストの字下げ、☐ / ☑、表は本文の列から右へ。行のグループ化で折りたためる。Excel で開ける
+- [x] 「元ノート」「見出し」の列: `--mode xlsx --path excel/01-types.md --set excelSourceColumns=true`。表の左に元ノート（リンク）と見出しの列
+- [x] Vault 全体の集計: `--mode summary --path ""`。`_export/test-vault_集計.xlsx` に目次・プロパティ（1 ノート 1 行、期日は日付型）・タスク（Vault 全体、期日は日付型、優先度は別の列、ノートはリンク）・Dataview（結果の表を「ノート名: クエリ」の表題付きで）
+- [x] 両方: `--mode both --path excel`。ノートごとの .docx と、フォルダごとの .xlsx の両方ができる
+- [x] 確認画面の出力形式の選択（2026-11-18 Claude が画面で確認）: 右クリック「Office 形式に変換…」で、出力形式の初期値（Word）が選ばれた確認画面が出る。「Word と Excel の両方」に変えると、題名が「Word と Excel に変換」になり、予定が .docx とブックの両方に計算し直される
+- [ ] 確認の後、`npm run build` の本番ビルドに戻して配置する
 
 ## フェーズ 4a の手動確認（完了条件 A）
 

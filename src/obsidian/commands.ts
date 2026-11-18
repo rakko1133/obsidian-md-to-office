@@ -30,6 +30,13 @@ const ENTRIES: readonly ModeEntry[] = [
 		vaultCommand: { id: "convert-excel-vault", name: "command.convertExcelVault" },
 	},
 	{
+		mode: "office",
+		menu: "menu.convertOffice",
+		icon: "files",
+		activeCommand: { id: "convert-office-current-note", name: "command.convertOfficeActive" },
+		vaultCommand: { id: "convert-office-vault", name: "command.convertOfficeVault" },
+	},
+	{
 		mode: "mermaid",
 		menu: "menu.saveMermaid",
 		icon: "image-down",
@@ -74,8 +81,11 @@ export function registerCommands(plugin: BatchOfficeExportPlugin): void {
 			callback: () => run(entry.mode, { kind: "vault" }),
 		});
 	}
+	// Vault 全体の集計（A-34）: 専用のコマンドだけ（R8）
+	plugin.addCommand({ id: "summarize-vault-excel", name: t("command.summarizeVault"), callback: () => run("summary", { kind: "vault" }) });
 }
 
-function pluginDir(plugin: BatchOfficeExportPlugin): string {
+/** プラグインのフォルダ（Vault からの相対パス）。 */
+export function pluginDir(plugin: BatchOfficeExportPlugin): string {
 	return plugin.manifest.dir ?? `${plugin.app.vault.configDir}/plugins/${plugin.manifest.id}`;
 }

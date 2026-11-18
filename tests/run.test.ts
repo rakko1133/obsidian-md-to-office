@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { aggregateStatus, runSequential, TIMEOUT_REASON } from "../src/core/run";
+import { aggregateStatus, mergeResults, runSequential, TIMEOUT_REASON } from "../src/core/run";
 import type { FileResult, NoteResult } from "../src/core/types";
 
 // C2: タイムアウト・continue-on-error・fail-fast・中断を、偽の部品で確かめる
@@ -117,5 +117,29 @@ describe("aggregateStatus", () => {
 		expect(aggregateStatus([f("success"), f("skipped")])).toBe("skipped");
 		expect(aggregateStatus([f("success"), f("unchanged")])).toBe("success");
 		expect(aggregateStatus([])).toBe("skipped");
+	});
+});
+
+describe("「両方」の結果のまとめ（R8・D5）", () => {
+	const file = (path: string, status: "success" | "skipped" | "failed", kind: "docx" | "xlsx" = "docx") => ({ output: { location: "vault" as const, path }, kind, status });
+	const note = (status: NoteResult["status"], files: NoteResult["files"], extra: Partial<NoteResult> = {}): NoteResult => ({ notePath: "a.md", status, files, warnings: [], deleted: [], ...extra });
+
+	it("両方の出力を足し、重いほうの状態にする", () => {
+		expect(mergeResults(note("success", [file("a.docx", "success")]), note("success", [file("a.xlsx", "success", "xlsx")]))).toMatchObject({ status: "success", files: [{ output: { path: "a.docx" } }, { output: { path: "a.xlsx" } }] });
+		expect(mergeResults(note("success", [file("a.docx", "success")]), note("skipped", [file("a.xlsx", "skipped", "xlsx")]))).toMatchObject({ status: "skipped" });
+		expect(mergeResults(note("success", [file("a.docx", "success")]), note("failed", [], { reason: "boom" }))).toMatchObject({ status: "failed", reason: "boom" });
+	});
+
+	it("表がない（Excel だけのスキップ）は、ノートのスキップにしない", () => {
+		expect(mergeResults(note("success", [file("a.docx", "success")]), note("skipped", [], { reason: "noTables" }))).toMatchObject({ status: "success", files: [{ output: { path: "a.docx" } }] });
+	});
+
+	it("1 フォルダ = 1 ブックの途中（Excel の出力がまだない）は Word の状態", () => {
+		expect(mergeResults(note("success", [file("a.docx", "success")]), note("success", []))).toMatchObject({ status: "success" });
+	});
+
+	it("同じ警告は 1 つにする", () => {
+		const w = { code: "brokenLink" as const, detail: "x" };
+		expect(mergeResults(note("success", [], { warnings: [w] }), note("success", [], { warnings: [w, { code: "cellTruncated" }] })).warnings).toEqual([w, { code: "cellTruncated" }]);
 	});
 });

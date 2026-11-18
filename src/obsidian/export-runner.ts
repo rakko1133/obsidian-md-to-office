@@ -7,15 +7,16 @@ import * as nodePath from "path";
 import { exportDocxNote, planDocxNote, type PlannedOutput, type VaultEnvironment } from "../core/docx-export";
 import { applyResults } from "../core/manifest";
 import { exportMermaidNote, planMermaidNote, type MermaidExportDeps } from "../core/mermaid-export";
-import { runSequential } from "../core/run";
+import { failedResult, mergeResults, runSequential } from "../core/run";
 import { XlsxRun, planXlsxNote, xlsxUnit } from "../core/xlsx-export";
+import { SummaryRun, planSummary, type SummaryLabels } from "../core/xlsx-summary";
 import type { XlsxLabels } from "../core/xlsx-render";
 import type { PluginSettings } from "../core/settings";
 import { filterTargets } from "../core/targets";
 import type { ManifestSnapshot, NoteResult, OutputRef, Warning } from "../core/types";
 import { t } from "../i18n";
 import { collectCandidates, type TargetSource } from "./collect";
-import { confirmTargets } from "./confirm-modal";
+import { confirmTargets, type OfficeFormat } from "./confirm-modal";
 import { FsDiagramCache } from "./diagram-cache";
 import { FsOutputWriter, type OutputRoots } from "./fs-writer";
 import { ManifestStore } from "./manifest-store";
@@ -24,7 +25,11 @@ import { createVaultEnvironment } from "./vault-env";
 import { ProgressNotice } from "./progress";
 import { showReport } from "./report-modal";
 
-export type ExportMode = "mermaid" | "docx" | "xlsx";
+/** office は「確認画面で形式を選ぶ」（初期値は設定 defaultFormat: R8） */
+export type ExportMode = "mermaid" | "docx" | "xlsx" | "both" | "summary" | "office";
+
+/** 出力形式 → モード（R8）。 */
+const FORMAT_MODES: Record<OfficeFormat, "docx" | "xlsx" | "both"> = { word: "docx", excel: "xlsx", both: "both" };
 
 export interface ExportHost {
 	app: App;
@@ -45,6 +50,8 @@ interface ModeContext {
 	targetCount: number;
 	/** Excel のブックの状態（確認画面の後に作る） */
 	xlsx?: XlsxRun;
+	/** Vault 全体の集計の状態（A-34） */
+	summary?: SummaryRun;
 }
 
 /** モードごとの違い: 確認画面の題名、ドライラン、ノート 1 件の処理。 */
@@ -58,7 +65,7 @@ interface ModeDefinition {
 	finish?(ctx: ModeContext, results: NoteResult[]): Promise<void>;
 }
 
-const MODES: Record<ExportMode, ModeDefinition> = {
+const MODES: Record<Exclude<ExportMode, "office">, ModeDefinition> = {
 	mermaid: {
 		title: () => t("confirm.title"),
 		plan: async ({ settings, deps }, path) => planMermaidNote(path, await deps.readNote(path), settings, deps.renderer.version, (ref) => deps.writer.exists(ref)),
@@ -85,7 +92,48 @@ const MODES: Record<ExportMode, ModeDefinition> = {
 		process: ({ xlsx }, path, signal) => xlsx!.addNote(path, signal),
 		finish: ({ xlsx }, results) => xlsx!.finish(results),
 	},
+	both: {
+		title: () => t("confirm.titleBoth"),
+		plan: async (ctx, path) => [...(await MODES.docx.plan(ctx, path)), ...(await MODES.xlsx.plan(ctx, path))],
+		start: (ctx, selected) => MODES.xlsx.start!(ctx, selected),
+		// ノートごとに .docx を作り、同じノートを Excel のブックにも足す。結果は 2 つの出力のうち重いほう（D5）。表がないことは Excel だけの事情なので、ノートのスキップにしない
+		process: async (ctx, path, signal, manifest) => {
+			const toFailed = (error: unknown) => failedResult(path, error instanceof Error ? error.message : String(error));
+			const docx = await MODES.docx.process(ctx, path, signal, manifest).catch(toFailed);
+			const xlsx = await MODES.xlsx.process(ctx, path, signal, manifest).catch(toFailed);
+			return mergeResults(docx, xlsx);
+		},
+		finish: (ctx, results) => MODES.xlsx.finish!(ctx, results),
+	},
+	summary: {
+		title: () => t("confirm.titleSummary"),
+		plan: ({ settings, deps, vault }) => planSummary(settings, vault.vaultName, t("summary.fileSuffix"), (ref: OutputRef) => deps.writer.exists(ref)),
+		start: (ctx) => {
+			ctx.summary = new SummaryRun(ctx.settings, { readNote: ctx.deps.readNote, writer: ctx.deps.writer, vault: ctx.vault, labels: xlsxLabels(), summary: summaryLabels() });
+		},
+		process: ({ summary }, path, signal) => summary!.addNote(path, signal),
+		finish: ({ summary }, results) => summary!.finish(results),
+	},
 };
+
+/** Vault 全体の集計のシートと列の名前（UI の言語に合わせる）。 */
+function summaryLabels(): SummaryLabels {
+	return {
+		fileSuffix: t("summary.fileSuffix"),
+		propertiesSheet: t("summary.properties"),
+		tasksSheet: t("summary.tasks"),
+		dataviewSheet: t("summary.dataview"),
+		note: t("summary.note"),
+		status: t("summary.status"),
+		task: t("summary.task"),
+		due: t("summary.due"),
+		priority: t("summary.priority"),
+		heading: t("summary.heading"),
+		open: t("summary.open"),
+		done: t("summary.done"),
+		priorities: [t("summary.priority.highest"), t("summary.priority.high"), t("summary.priority.medium"), t("summary.priority.low"), t("summary.priority.lowest")],
+	};
+}
 
 /** .xlsx の目次シートなどの文字（UI の言語に合わせる）。 */
 function xlsxLabels(): XlsxLabels {
@@ -97,6 +145,7 @@ function xlsxLabels(): XlsxLabels {
 		tableCount: t("xlsx.toc.tables"),
 		column: (n) => t("xlsx.column", { n: String(n) }),
 		table: (n) => t("xlsx.table", { n: String(n) }),
+		body: t("xlsx.body"),
 	};
 }
 
@@ -113,31 +162,52 @@ function readStrictLineBreaks(app: App): boolean | undefined {
 
 let running = false;
 
-export async function runExport(host: ExportHost, mode: ExportMode, source: TargetSource): Promise<void> {
+/** 確認画面と結果画面を出さずに実行する（開発用の自動実行: dev-automation.ts）。 */
+export interface AutoRunOptions {
+	/** この実行だけに使う設定の上書き（保存しない） */
+	settings?: Partial<PluginSettings>;
+}
+
+export interface RunReport {
+	end: RunOutcomeEnd;
+	results: NoteResult[];
+	runWarnings: Warning[];
+}
+
+type RunOutcomeEnd = Awaited<ReturnType<typeof runSequential>>["end"];
+
+/**
+ * 書き出しを実行する。auto を渡すと、確認画面ではすべての候補を選んだことにし、結果画面を出さずに結果を返す。
+ * 実行しなかったとき（実行中・対象なし・取り消し）は null。
+ */
+export async function runExport(host: ExportHost, mode: ExportMode, source: TargetSource, auto?: AutoRunOptions): Promise<RunReport | null> {
 	if (running) {
 		new Notice(t("notice.alreadyRunning"));
-		return;
+		return null;
 	}
 	const { app } = host;
-	const definition = MODES[mode];
+	// 確認画面で選ぶ出力形式（Word / Excel / 両方・R8）。初期値は、起動したコマンドの形式か設定 defaultFormat
+	const initialFormat: OfficeFormat | undefined =
+		mode === "office" ? host.settings.defaultFormat : mode === "docx" ? "word" : mode === "xlsx" ? "excel" : mode === "both" ? "both" : undefined;
+	let definition = MODES[mode === "office" ? FORMAT_MODES[host.settings.defaultFormat] : mode];
 	if (source.kind === "active" && !(app.workspace.getActiveFile()?.extension === "md")) {
 		new Notice(t("notice.noActiveNote"));
-		return;
+		return null;
 	}
 	const adapter = app.vault.adapter;
-	if (!(adapter instanceof FileSystemAdapter)) return; // isDesktopOnly なので通常は来ない
+	if (!(adapter instanceof FileSystemAdapter)) return null; // isDesktopOnly なので通常は来ない
 	// 実行中に設定が変わっても影響しないよう、写しを使う
-	const settings: PluginSettings = structuredClone(host.settings);
+	const settings: PluginSettings = { ...structuredClone(host.settings), ...structuredClone(auto?.settings ?? {}) };
 	if (settings.outputLocation === "external" && settings.saveMode === "mirror" && settings.externalOutputRoot === "") {
 		new Notice(t("notice.externalRootMissing"));
-		return;
+		return null;
 	}
 
 	// 01: 変換対象の収集
 	const { targets, excluded } = filterTargets(collectCandidates(app, source), settings.includeGlobs, settings.excludeGlobs);
 	if (targets.length === 0) {
 		new Notice(t("notice.noTargets", { excluded: String(excluded.length) }));
-		return;
+		return null;
 	}
 
 	running = true;
@@ -154,7 +224,7 @@ export async function runExport(host: ExportHost, mode: ExportMode, source: Targ
 			renderer = await createMermaidRenderer();
 		} catch (error) {
 			new Notice(t("notice.mermaidUnavailable", { error: String(error) }));
-			return;
+			return null;
 		}
 
 		const readNote = async (path: string): Promise<string> => {
@@ -178,16 +248,30 @@ export async function runExport(host: ExportHost, mode: ExportMode, source: Targ
 				: settings.outputLocation === "external"
 					? settings.externalOutputRoot
 					: `${settings.outputRoot}/`;
-		const selected = await confirmTargets(app, {
-			title: definition.title(),
-			targets,
-			excludedCount: excluded.length,
-			outputLabel,
-			plan: (path) => definition.plan(ctx, path),
-		});
-		if (!selected || selected.length === 0) return;
-		ctx.selected = new Set(selected);
-		definition.start?.(ctx, selected);
+		const selected = auto
+			? targets
+			: await confirmTargets(app, {
+					title: definition.title(),
+					targets,
+					excludedCount: excluded.length,
+					outputLabel,
+					plan: (path) => definition.plan(ctx, path),
+					...(initialFormat
+						? {
+								formats: {
+									initial: initialFormat,
+									title: (format: OfficeFormat) => MODES[FORMAT_MODES[format]].title(),
+									plan: (format: OfficeFormat, path: string) => MODES[FORMAT_MODES[format]].plan(ctx, path),
+								},
+							}
+						: {}),
+				});
+		const chosen = Array.isArray(selected) ? { notes: selected } : selected;
+		if (!chosen || chosen.notes.length === 0) return null;
+		if (chosen.format) definition = MODES[FORMAT_MODES[chosen.format]];
+		const notes = chosen.notes;
+		ctx.selected = new Set(notes);
+		definition.start?.(ctx, notes);
 
 		// 10: マニフェストは開始時に 1 回だけ読む（D4）
 		const { snapshot, warnings: loadWarnings } = await store.load();
@@ -198,7 +282,7 @@ export async function runExport(host: ExportHost, mode: ExportMode, source: Targ
 		let outcome;
 		try {
 			outcome = await runSequential({
-				notes: selected,
+				notes,
 				processNote: (path, signal) => definition.process(ctx, path, signal, snapshot),
 				timeoutMs: settings.timeoutSeconds * 1000,
 				onError: settings.onError,
@@ -219,7 +303,9 @@ export async function runExport(host: ExportHost, mode: ExportMode, source: Targ
 		}
 		await cache.evict().catch(() => undefined);
 
-		showReport(app, { end: outcome.end, results: outcome.results, runWarnings });
+		const report: RunReport = { end: outcome.end, results: outcome.results, runWarnings };
+		if (!auto) showReport(app, report);
+		return report;
 	} finally {
 		running = false;
 	}

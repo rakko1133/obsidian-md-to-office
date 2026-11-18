@@ -8,6 +8,7 @@ import { refKey } from "../src/core/output-plan";
 import { DEFAULT_SETTINGS, type PluginSettings } from "../src/core/settings";
 import type { NoteResult, OutputRef } from "../src/core/types";
 import { XlsxRun, xlsxOutputRef, xlsxUnit } from "../src/core/xlsx-export";
+import { SummaryRun, dataviewBlocks, extractTasks, frontmatterText, summaryOutputRef, type SummaryLabels } from "../src/core/xlsx-summary";
 import { columnLetter, type XlsxLabels } from "../src/core/xlsx-render";
 import {
 	columnWidth,
@@ -155,6 +156,7 @@ const LABELS: XlsxLabels = {
 	tableCount: "表の数",
 	column: (n) => `列${n}`,
 	table: (n) => `表 ${n}`,
+	body: "本文",
 };
 
 /** 書き込んだバイト列を覚えておく偽の書き込み先。 */
@@ -210,7 +212,7 @@ describe("サンプルの .xlsx（test-vault/excel）", async () => {
 	const sheet = (name: string): Worksheet => wb.getWorksheet(name)!;
 
 	it("フォルダごとに 1 ブック（サブフォルダは別のブック）", () => {
-		expect([...writer.files.keys()].sort()).toEqual(["vault:_export/excel/excel.xlsx", "vault:_export/excel/parts/parts.xlsx", "vault:_export/excel/sub/sub.xlsx"]);
+		expect([...writer.files.keys()].sort()).toEqual(["vault:_export/excel/excel.xlsx", "vault:_export/excel/outline/outline.xlsx", "vault:_export/excel/parts/parts.xlsx", "vault:_export/excel/sub/sub.xlsx"]);
 	});
 
 	it("表のないノートはスキップ（表なし）、ほかはブックの結果が付く", () => {
@@ -379,5 +381,221 @@ describe("設定による違い", () => {
 		await run.finish(results);
 		const wb = await load(writer.files.get("vault:_export/excel/excel.xlsx")!);
 		expect(wb.worksheets.map((w) => w.name)).toEqual(["03-cell-format"]);
+	});
+});
+
+describe("アウトライン形式（A-30 のオプション）", async () => {
+	const { writer, results } = await convertFolder(["excel/outline/07-outline.md"], { excelOutlineMode: true });
+	const wb = await load(writer.files.get("vault:_export/excel/outline/07-outline.xlsx")!);
+	const s = wb.worksheets[0]!;
+	const rowOf = (text: string): number => {
+		let found = 0;
+		s.eachRow((row, n) => {
+			for (let c = 1; c <= 6; c++) if (found === 0 && String(row.getCell(c).value ?? "").includes(text)) found = n;
+		});
+		return found;
+	};
+
+	it("見出し行と列（H1・H2・H3・本文）、固定", () => {
+		expect(results[0]!.status).toBe("success");
+		expect((s.getRow(1).values as unknown[]).slice(1)).toEqual(["H1", "H2", "H3", "本文"]);
+		expect(s.views[0]).toMatchObject({ state: "frozen", ySplit: 1 });
+		expect(s.getCell(`A${rowOf("計画")}`).value).toBe("計画");
+		expect(s.getCell(`B${rowOf("準備")}`).value).toBe("準備");
+		expect(s.getCell(`C${rowOf("予算")}`).value).toBe("予算");
+		// H4 は本文の列に太字
+		const h4 = s.getCell(`D${rowOf("細目")}`);
+		expect(h4.value).toBe("細目（H4 は本文の列）");
+		expect(h4.font).toMatchObject({ bold: true });
+	});
+
+	it("行のグループ化: H1 の前は 0、H1 の下は 1、H2 の下は 2、H3 以下の下は 3", () => {
+		const level = (text: string) => s.getRow(rowOf(text)).outlineLevel ?? 0;
+		expect(level("本文の前の段落")).toBe(0);
+		expect(level("計画")).toBe(0);
+		expect(level("全体の説明")).toBe(1);
+		expect(level("準備")).toBe(1);
+		expect(level("会場を予約する")).toBe(2);
+		expect(level("予算")).toBe(2);
+		expect(level("const total")).toBe(3);
+		expect(level("当日")).toBe(1);
+		expect(s.properties.outlineProperties).toMatchObject({ summaryBelow: false });
+	});
+
+	it("リスト（字下げ・タスクの記号・番号）、コード、コールアウト、表", () => {
+		expect(s.getCell(`D${rowOf("第 1 候補")}`).value).toBe("  第 1 候補");
+		expect(s.getCell(`D${rowOf("資料を作る")}`).value).toBe("☐ 資料を作る");
+		expect(s.getCell(`D${rowOf("日程を決める")}`).value).toBe("☑ 日程を決める");
+		expect(s.getCell(`D${rowOf("受付は")}`).value).toBe("受付は 9 時から。");
+		expect(s.getCell(`D${rowOf("注意")}`).font).toMatchObject({ bold: true });
+		expect(s.getCell(`D${rowOf("1. 受付")}`).value).toBe("1. 受付");
+		expect(s.getCell(`D${rowOf("const total")}`).font).toMatchObject({ name: "Consolas" });
+		const head = rowOf("項目");
+		expect(s.getCell(`D${head}`).value).toBe("項目");
+		expect(s.getCell(`E${head}`).value).toBe("金額");
+		expect(s.getCell(`E${head + 1}`).value).toBe(50000);
+		expect(s.getCell(`E${head + 1}`).numFmt).toBe("#,##0");
+		// Excel テーブルにはしない
+		expect(Object.keys((s as unknown as { tables: Record<string, unknown> }).tables)).toHaveLength(0);
+	});
+
+	it("sheetPr の中の要素が仕様の順番（outlinePr → pageSetUpPr）になっている（逆だと Excel が開けない）", async () => {
+		const JSZip = (await import("jszip")).default;
+		const zip = await JSZip.loadAsync(writer.files.get("vault:_export/excel/outline/07-outline.xlsx")!);
+		const xml = await zip.file("xl/worksheets/sheet1.xml")!.async("string");
+		const sheetPr = /<sheetPr>.*?<\/sheetPr>/.exec(xml)?.[0] ?? "";
+		expect(sheetPr).toContain("<outlinePr");
+		const page = sheetPr.indexOf("<pageSetUpPr");
+		expect(page === -1 || page > sheetPr.indexOf("<outlinePr")).toBe(true);
+		expect(xml).not.toContain('collapsed="1"');
+	});
+
+	it("表のないノートもシートを作る", async () => {
+		const { writer: w, results: r } = await convertFolder(["excel/04-no-table.md"], { excelOutlineMode: true });
+		expect(r[0]!.status).toBe("success");
+		const book = await load(w.files.get("vault:_export/excel/04-no-table.xlsx")!);
+		expect(book.worksheets[0]!.getCell("A2").value).toBe("表のないノート");
+	});
+});
+
+describe("「元ノート」「見出し」の列（D-5 のオプション）", () => {
+	it("各表の左に、元ノートへのリンクと直前の見出しの列を足す", async () => {
+		const { writer } = await convertFolder(["excel/01-types.md"], { excelSourceColumns: true });
+		const s = (await load(writer.files.get("vault:_export/excel/01-types.xlsx")!)).worksheets[0]!;
+		expect((s.getRow(2).values as unknown[]).slice(1, 4)).toEqual(["元ノート", "見出し", "名前"]);
+		expect(s.getCell("A3").value).toEqual({ text: "excel/01-types.md", hyperlink: "obsidian://open?vault=test-vault&file=excel%2F01-types.md" });
+		expect(s.getCell("B3").value).toBe("値の型");
+		// 元の列の型の判定は変わらない
+		expect(s.getCell("D3").value).toBe(1);
+	});
+});
+
+describe("Vault 全体の集計の部品（A-34）", () => {
+	it("タスク: 状態・本文・期日・優先度・見出し。Tasks の記号は取り除き、frontmatter とコードブロックの中は数えない", () => {
+		const md = ["---", "title: x", "- [ ] frontmatter の中", "---", "# 見出し A", "- [ ] 会場 📅 2026-11-25 ⏫", "  - [x] 下位 ✅ 2026-11-10", "* [/] 資料 🔼 📅 2026-11-30 🔁 every week", "1. [ ] 番号付き 🔺 ^id-1", "```", "- [ ] コードの中", "```", "## 見出し B", "- [-] 取り消し ⏬ 🆔 abc ⛔ def", "- 普通の項目", ""].join("\n");
+		expect(extractTasks(md)).toEqual([
+			{ mark: " ", text: "会場", due: "2026-11-25", priority: 1, heading: "見出し A" },
+			{ mark: "x", text: "下位", heading: "見出し A" },
+			{ mark: "/", text: "資料", due: "2026-11-30", priority: 2, heading: "見出し A" },
+			{ mark: " ", text: "番号付き", priority: 0, heading: "見出し A" },
+			{ mark: "-", text: "取り消し", priority: 4, heading: "見出し B" },
+		]);
+	});
+
+	it("dataview のコードブロックを取り出す（ほかの言語と、長いフェンスの中は除く）", () => {
+		const md = ["```dataview", "TABLE x", "```", "````md", "```dataview", "LIST", "```", "````", "~~~dataviewjs", "dv.list([1])", "~~~", "```js", "x", "```"].join("\n");
+		expect(dataviewBlocks(md)).toEqual([
+			{ lang: "dataview", source: "TABLE x" },
+			{ lang: "dataviewjs", source: "dv.list([1])" },
+		]);
+	});
+
+	it("frontmatter の値の文字と、出力先", () => {
+		expect(frontmatterText(["a", "b"])).toBe("a, b");
+		expect(frontmatterText(3)).toBe("3");
+		expect(frontmatterText(true)).toBe("true");
+		expect(frontmatterText(null)).toBe("");
+		expect(frontmatterText({ a: 1 })).toBe('{"a":1}');
+		expect(summaryOutputRef(DEFAULT_SETTINGS, "V", "集計")).toEqual({ location: "vault", path: "_export/V_集計.xlsx" });
+		expect(summaryOutputRef({ ...DEFAULT_SETTINGS, saveMode: "sameFolder" }, "V", "集計")).toEqual({ location: "vault", path: "V_集計.xlsx" });
+	});
+});
+
+const SUMMARY_LABELS: SummaryLabels = {
+	fileSuffix: "集計",
+	propertiesSheet: "プロパティ",
+	tasksSheet: "タスク",
+	dataviewSheet: "Dataview",
+	note: "ノート",
+	status: "状態",
+	task: "タスク",
+	due: "期日",
+	priority: "優先度",
+	heading: "見出し",
+	open: "未完了",
+	done: "完了",
+	priorities: ["最高", "高", "中", "低", "最低"],
+};
+
+describe("Vault 全体の集計（A-34）", async () => {
+	const writer = new MemoryWriter();
+	const frontmatters: Record<string, Record<string, unknown>> = {
+		"excel/08-tasks.md": { status: "進行中", due: "2026-12-01", tags: ["project", "excel"], count: 3 },
+		"word3a/08-frontmatter.md": { title: "frontmatter のタイトル", count: 10, extra: "x" },
+	};
+	const notes = FILES.filter((f) => f.endsWith(".md")).sort();
+	const run = new SummaryRun(DEFAULT_SETTINGS, {
+		readNote: async (p) => readFileSync(join(VAULT_DIR, p), "utf8"),
+		writer,
+		labels: LABELS,
+		summary: SUMMARY_LABELS,
+		vault: {
+			resolveLink: fakeResolve,
+			fileExists: (p) => FILES.includes(p),
+			vaultName: "test-vault",
+			frontmatter: (p) => frontmatters[p],
+			renderableLanguage: (lang) => lang === "dataview",
+			renderBlock: async (_lang, source) =>
+				source.includes("TABLE")
+					? [{ type: "table", align: [null, null], children: [{ type: "tableRow", children: [{ type: "tableCell", children: [{ type: "text", value: "File" }] }, { type: "tableCell", children: [{ type: "text", value: "status" }] }] }, { type: "tableRow", children: [{ type: "tableCell", children: [{ type: "text", value: "データ A" }] }, { type: "tableCell", children: [{ type: "text", value: "draft" }] }] }] }]
+					: [{ type: "list", ordered: false, spread: false, children: [] }],
+		},
+	});
+	const results: NoteResult[] = [];
+	for (const n of notes) results.push(await run.addNote(n, new AbortController().signal));
+	await run.finish(results);
+	const bytes = writer.files.get("vault:_export/test-vault_集計.xlsx")!;
+	const wb = await load(bytes);
+	const sheetRows = (name: string) => {
+		const rows: unknown[][] = [];
+		wb.getWorksheet(name)!.eachRow((row) => rows.push((row.values as unknown[]).slice(1)));
+		return rows;
+	};
+
+	it("1 つのブックに、目次・プロパティ・タスク・Dataview のシート", () => {
+		expect([...writer.files.keys()]).toEqual(["vault:_export/test-vault_集計.xlsx"]);
+		expect(wb.worksheets.map((w) => w.name).sort()).toEqual(["Dataview", "タスク", "プロパティ", "目次"].sort());
+	});
+
+	it("プロパティ: frontmatter のあるノートだけ、キーは最初に出てきた順、型の判定", () => {
+		const rows = sheetRows("プロパティ");
+		expect(rows[0]).toEqual(["ノート", "status", "due", "tags", "count", "title", "extra"]);
+		expect(rows).toHaveLength(3);
+		const s = wb.getWorksheet("プロパティ")!;
+		expect((s.getCell("A2").value as { hyperlink: string }).hyperlink).toBe("obsidian://open?vault=test-vault&file=excel%2F08-tasks.md");
+		expect(s.getCell("D2").value).toBe("project, excel");
+		expect(s.getCell("E2").value).toBe(3);
+		expect((s.getCell("C2").value as Date).toISOString()).toBe("2026-12-01T00:00:00.000Z");
+	});
+
+	it("タスク: Vault 全体のタスク。期日は日付型、優先度は別の列、ノートはリンク", () => {
+		const s = wb.getWorksheet("タスク")!;
+		const rows = sheetRows("タスク");
+		expect(rows[0]).toEqual(["状態", "タスク", "期日", "優先度", "ノート", "見出し"]);
+		const row = rows.findIndex((r) => r[1] === "会場を予約する") + 1;
+		expect(s.getCell(`A${row}`).value).toBe("未完了");
+		expect((s.getCell(`C${row}`).value as Date).toISOString()).toBe("2026-11-25T00:00:00.000Z");
+		expect(s.getCell(`C${row}`).numFmt).toBe("yyyy-mm-dd");
+		expect(s.getCell(`D${row}`).value).toBe("高");
+		expect((s.getCell(`E${row}`).value as { text: string }).text).toBe("08-tasks");
+		expect(s.getCell(`F${row}`).value).toBe("準備");
+		expect(rows.some((r) => r[1] === "日程を決める" && r[0] === "完了")).toBe(true);
+		expect(rows.some((r) => r[1] === "資料を作る" && r[0] === "/")).toBe(true);
+		expect(rows.some((r) => String(r[1]).includes("コードブロック"))).toBe(false);
+		// 他のフォルダのサンプルのタスクも集める
+		expect(rows.some((r) => (r[4] as { text?: string })?.text === "04-tasks")).toBe(true);
+	});
+
+	it("Dataview: 結果の表を「ノート名: クエリの 1 行目」を表題にして並べる。結果の表のない LIST は入れない", () => {
+		const rows = sheetRows("Dataview");
+		expect(rows.some((r) => String(r[0]).startsWith("02-dataview: TABLE"))).toBe(true);
+		expect(rows.some((r) => String(r[0]).includes("LIST"))).toBe(false);
+	});
+
+	it("結果: 行を出したノートにブックが付き、ほかは成功（出力なし）", () => {
+		const tasks = results.find((r) => r.notePath === "excel/08-tasks.md")!;
+		expect(tasks.files.map((f) => f.output.path)).toEqual(["_export/test-vault_集計.xlsx"]);
+		const plain = results.find((r) => r.notePath === "excel/01-types.md")!;
+		expect(plain).toMatchObject({ status: "success", files: [] });
 	});
 });

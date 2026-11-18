@@ -1,6 +1,6 @@
 {
   "name": "batch-office-export",
-  "version": "0.4.0",
+  "version": "0.4.1",
   "description": "Batch-convert notes to Word (.docx) and Excel (.xlsx), with Mermaid diagrams as images.",
   "private": true,
   "license": "UNLICENSED",
@@ -13,7 +13,8 @@
     "test": "vitest run",
     "deploy:test-vault": "node scripts/deploy-test-vault.mjs",
     "preview:export": "python scripts/preview-export.py",
-    "preview:approve": "python scripts/preview-export.py --approve"
+    "preview:approve": "python scripts/preview-export.py --approve",
+    "obsidian:run": "node scripts/obsidian-run.mjs"
   },
   "dependencies": {
     "docx": "^9.15.4",

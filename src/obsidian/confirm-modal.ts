@@ -6,6 +6,9 @@ import type { PlannedAction } from "../core/types";
 import { dirName } from "../core/output-plan";
 import { t } from "../i18n";
 
+/** 確認画面で選ぶ出力形式（R8）。 */
+export type OfficeFormat = "word" | "excel" | "both";
+
 export interface ConfirmOptions {
 	title: string;
 	targets: readonly string[];
@@ -13,10 +16,22 @@ export interface ConfirmOptions {
 	outputLabel: string;
 	/** ノート 1 件のドライラン（描画しない） */
 	plan: (notePath: string) => Promise<PlannedOutput[]>;
+	/** 出力形式を選べるようにする（Word / Excel / 両方: R8）。形式を変えると、題名と予定を計算し直す */
+	formats?: {
+		initial: OfficeFormat;
+		title(format: OfficeFormat): string;
+		plan(format: OfficeFormat, notePath: string): Promise<PlannedOutput[]>;
+	};
 }
 
-/** 確認画面を開き、実行するノートの一覧を返す。キャンセルなら null。 */
-export function confirmTargets(app: App, options: ConfirmOptions): Promise<string[] | null> {
+export interface ConfirmResult {
+	notes: string[];
+	/** 選んだ出力形式（formats を渡したときだけ） */
+	format?: OfficeFormat;
+}
+
+/** 確認画面を開き、実行するノートの一覧（と選んだ出力形式）を返す。キャンセルなら null。 */
+export function confirmTargets(app: App, options: ConfirmOptions): Promise<ConfirmResult | null> {
 	return new Promise((resolve) => new ConfirmModal(app, options, resolve).open());
 }
 
@@ -30,20 +45,43 @@ class ConfirmModal extends Modal {
 	private readonly noteSummaryEls = new Map<string, HTMLElement>();
 	private readonly noteDetailEls = new Map<string, HTMLElement>();
 	private readonly checkboxes = new Map<string, HTMLInputElement>();
+	private format: OfficeFormat | undefined;
+	/** 予定の計算の世代（形式を変えたら、古い計算の結果を捨てる） */
+	private generation = 0;
 
 	constructor(
 		app: App,
 		private readonly options: ConfirmOptions,
-		private readonly resolve: (value: string[] | null) => void,
+		private readonly resolve: (value: ConfirmResult | null) => void,
 	) {
 		super(app);
 		this.checked = new Set(options.targets);
+		this.format = options.formats?.initial;
 	}
 
 	override onOpen(): void {
 		const { contentEl } = this;
-		this.setTitle(this.options.title);
+		this.setTitle(this.format && this.options.formats ? this.options.formats.title(this.format) : this.options.title);
 		contentEl.addClass("batch-office-export-confirm");
+
+		const formats = this.options.formats;
+		if (formats && this.format) {
+			new Setting(contentEl).setName(t("confirm.format")).addDropdown((d) =>
+				d
+					.addOption("word", t("format.word"))
+					.addOption("excel", t("format.excel"))
+					.addOption("both", t("format.both"))
+					.setValue(this.format!)
+					.onChange((v) => {
+						this.format = v as OfficeFormat;
+						this.setTitle(formats.title(this.format));
+						this.plans.clear();
+						this.totalsEl.setText(t("confirm.calculating"));
+						for (const el of this.noteSummaryEls.values()) el.setText(`  ${t("confirm.calculating")}`);
+						void this.computePlans();
+					}),
+			);
+		}
 
 		this.summaryEl = contentEl.createEl("p");
 		contentEl.createEl("p", { text: t("confirm.output", { path: this.options.outputLabel }) });
@@ -59,7 +97,7 @@ class ConfirmModal extends Modal {
 				this.runButton = b;
 				b.setButtonText(t("confirm.run"))
 					.setCta()
-					.onClick(() => this.finish([...this.options.targets].filter((p) => this.checked.has(p))));
+					.onClick(() => this.finish({ notes: [...this.options.targets].filter((p) => this.checked.has(p)), ...(this.format ? { format: this.format } : {}) }));
 			});
 
 		this.updateSummary();
@@ -74,7 +112,7 @@ class ConfirmModal extends Modal {
 		}
 	}
 
-	private finish(selected: string[]): void {
+	private finish(selected: ConfirmResult): void {
 		this.resolved = true;
 		this.resolve(selected);
 		this.close();
@@ -133,14 +171,18 @@ class ConfirmModal extends Modal {
 
 	/** ノートごとにドライランを計算して表示する。1 件ごとに制御を返して画面を固めない。 */
 	private async computePlans(): Promise<void> {
+		const generation = ++this.generation;
+		const format = this.format;
+		const formats = this.options.formats;
 		for (const note of this.options.targets) {
-			if (this.resolved) return;
+			if (this.resolved || generation !== this.generation) return;
 			let plans: PlannedOutput[] = [];
 			try {
-				plans = await this.options.plan(note);
+				plans = formats && format ? await formats.plan(format, note) : await this.options.plan(note);
 			} catch {
 				plans = [];
 			}
+			if (generation !== this.generation) return;
 			this.plans.set(note, plans);
 			this.noteSummaryEls.get(note)?.setText(`  ${actionSummary(plans) || t("confirm.noOutputs")}`);
 			const details = this.noteDetailEls.get(note);

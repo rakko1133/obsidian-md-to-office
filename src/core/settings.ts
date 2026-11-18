@@ -64,6 +64,12 @@ export interface PluginSettings {
 	excelSheetUnit: "perNote" | "perTable";
 	/** 各表を Excel テーブルにする（D-3） */
 	excelAsTable: boolean;
+	/** 表だけでなく本文全体をアウトライン形式で出す（A-30 のオプション） */
+	excelOutlineMode: boolean;
+	/** 各表の左に「元ノート」「見出し」の列を足す（D-5 のオプション） */
+	excelSourceColumns: boolean;
+	/** 確認画面の出力形式の初期値（R8） */
+	defaultFormat: "word" | "excel" | "both";
 }
 
 export const DEFAULT_SETTINGS: Readonly<PluginSettings> = {
@@ -99,6 +105,9 @@ export const DEFAULT_SETTINGS: Readonly<PluginSettings> = {
 	excelBookUnit: "perFolder",
 	excelSheetUnit: "perNote",
 	excelAsTable: true,
+	excelOutlineMode: false,
+	excelSourceColumns: false,
+	defaultFormat: "word",
 };
 
 /**
@@ -144,6 +153,9 @@ export function normalizeSettings(raw: unknown): PluginSettings {
 		excelBookUnit: oneOf(data.excelBookUnit, ["perFolder", "perNote"], d.excelBookUnit),
 		excelSheetUnit: oneOf(data.excelSheetUnit, ["perNote", "perTable"], d.excelSheetUnit),
 		excelAsTable: typeof data.excelAsTable === "boolean" ? data.excelAsTable : d.excelAsTable,
+		excelOutlineMode: typeof data.excelOutlineMode === "boolean" ? data.excelOutlineMode : d.excelOutlineMode,
+		excelSourceColumns: typeof data.excelSourceColumns === "boolean" ? data.excelSourceColumns : d.excelSourceColumns,
+		defaultFormat: oneOf(data.defaultFormat, ["word", "excel", "both"], d.defaultFormat),
 	};
 }
 

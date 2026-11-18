@@ -9,6 +9,7 @@ import { baseName, dirName, joinPath, noteBaseName, outputDirFor, plannedAction,
 import { aggregateStatus } from "./run";
 import type { PluginSettings } from "./settings";
 import type { FileResult, NoteResult, OutputRef, Warning } from "./types";
+import { outlineRows } from "./xlsx-outline";
 import { NOTE_LINK_SCHEME, XlsxBook, firstHeading, tablesOf, type XlsxLabels } from "./xlsx-render";
 
 /** Excel の出力単位（R8・D6）。 */
@@ -87,6 +88,7 @@ export class XlsxRun {
 					asTable: this.settings.excelAsTable,
 					labels: this.deps.labels,
 					noteUri: (path) => obsidianOpenUri(this.deps.vault?.vaultName ?? "", path),
+					sourceColumns: this.settings.excelSourceColumns,
 				}),
 				title: folder === "" ? this.deps.vault?.vaultName || "Vault" : baseName(folder),
 				contributors: [],
@@ -109,13 +111,16 @@ export class XlsxRun {
 		};
 		const assembled = await assembleNote(notePath, env, { keepComments: false, downloadExternalImages: this.settings.downloadExternalImages, signal });
 		const warnings: Warning[] = [...assembled.warnings];
+		const outline = this.settings.excelOutlineMode;
 		const tables = tablesOf(assembled.tree);
-		if (tables.length === 0) return { notePath, status: "skipped", reason: "noTables", files: [], warnings, deleted: [] };
+		// アウトライン形式では、表のないノートもシートを作る（D-1b の括弧書き・A-30）
+		if (!outline && tables.length === 0) return { notePath, status: "skipped", reason: "noTables", files: [], warnings, deleted: [] };
 
 		const group = this.groupOf(notePath);
 		// タイムアウトしたノートのシートは足さない（D1・D2）
 		if (signal.aborted) throw signal.reason instanceof Error ? signal.reason : new Error("aborted");
-		warnings.push(...group.book.addNote({ notePath, noteName: noteBaseName(notePath), firstHeading: firstHeading(assembled.tree), tables }));
+		const base = { notePath, noteName: noteBaseName(notePath), firstHeading: firstHeading(assembled.tree) };
+		warnings.push(...(outline ? group.book.addOutlineNote({ ...base, rows: outlineRows(assembled.tree) }) : group.book.addNote({ ...base, tables })));
 		group.contributors.push(notePath);
 
 		if (this.unit === "perFolder") return { notePath, status: "success", files: [], warnings, deleted: [] };

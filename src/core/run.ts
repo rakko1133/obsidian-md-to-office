@@ -78,3 +78,19 @@ export function aggregateStatus(files: readonly FileResult[]): NoteResult["statu
 function errorMessage(error: unknown): string {
 	return error instanceof Error ? error.message : String(error);
 }
+
+/** 「両方」のノートの結果をまとめる（失敗 > スキップ > 成功: D5）。同じ警告（2 回組み立てるので重なる）は 1 つにする。 */
+export function mergeResults(docx: NoteResult, xlsx: NoteResult): NoteResult {
+	const files = [...docx.files, ...xlsx.files];
+	const seen = new Set<string>();
+	const warnings = [...docx.warnings, ...xlsx.warnings].filter((w) => {
+		const key = `${w.code}:${w.detail ?? ""}`;
+		if (seen.has(key)) return false;
+		seen.add(key);
+		return true;
+	});
+	const failed = [docx, xlsx].find((r) => r.status === "failed");
+	const status = failed ? "failed" : files.length > 0 ? aggregateStatus(files) : docx.status;
+	const reason = failed?.reason ?? (status === "skipped" ? docx.reason : undefined);
+	return { notePath: docx.notePath, status, files, warnings, deleted: [...docx.deleted, ...xlsx.deleted], ...(reason ? { reason } : {}) };
+}

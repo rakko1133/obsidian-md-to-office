@@ -25,6 +25,17 @@ export class BatchOfficeExportSettingTab extends PluginSettingTab {
 		// 出力
 		new Setting(containerEl).setName(t("settings.heading.output")).setHeading();
 		new Setting(containerEl)
+			.setName(t("settings.defaultFormat.name"))
+			.setDesc(t("settings.defaultFormat.desc"))
+			.addDropdown((d) =>
+				d
+					.addOption("word", t("format.word"))
+					.addOption("excel", t("format.excel"))
+					.addOption("both", t("format.both"))
+					.setValue(s.defaultFormat)
+					.onChange(async (v) => save("defaultFormat", v as PluginSettings["defaultFormat"])),
+			);
+		new Setting(containerEl)
 			.setName(t("settings.outputLocation.name"))
 			.setDesc(t("settings.outputLocation.desc"))
 			.addDropdown((d) =>
@@ -213,6 +224,14 @@ export class BatchOfficeExportSettingTab extends PluginSettingTab {
 			.setName(t("settings.excelAsTable.name"))
 			.setDesc(t("settings.excelAsTable.desc"))
 			.addToggle((tg) => tg.setValue(s.excelAsTable).onChange(async (v) => save("excelAsTable", v)));
+		new Setting(containerEl)
+			.setName(t("settings.excelOutlineMode.name"))
+			.setDesc(t("settings.excelOutlineMode.desc"))
+			.addToggle((tg) => tg.setValue(s.excelOutlineMode).onChange(async (v) => save("excelOutlineMode", v)));
+		new Setting(containerEl)
+			.setName(t("settings.excelSourceColumns.name"))
+			.setDesc(t("settings.excelSourceColumns.desc"))
+			.addToggle((tg) => tg.setValue(s.excelSourceColumns).onChange(async (v) => save("excelSourceColumns", v)));
 	}
 
 	override hide(): void {
