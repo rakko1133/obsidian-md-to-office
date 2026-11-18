@@ -201,6 +201,41 @@ export class BatchOfficeExportSettingTab extends PluginSettingTab {
 				.setValue(s.calloutColorSource)
 				.onChange(async (v) => save("calloutColorSource", v as PluginSettings["calloutColorSource"])),
 		);
+		new Setting(containerEl)
+			.setName(t("settings.footerPageNumber.name"))
+			.setDesc(t("settings.footerPageNumber.desc"))
+			.addToggle((tg) => tg.setValue(s.footerPageNumber).onChange(async (v) => save("footerPageNumber", v)));
+		new Setting(containerEl).setName(t("settings.headerTitle.name")).addToggle((tg) => tg.setValue(s.headerTitle).onChange(async (v) => save("headerTitle", v)));
+		new Setting(containerEl)
+			.setName(t("settings.coverPage.name"))
+			.setDesc(t("settings.coverPage.desc"))
+			.addToggle((tg) => tg.setValue(s.coverPage).onChange(async (v) => save("coverPage", v)));
+		new Setting(containerEl)
+			.setName(t("settings.tableOfContents.name"))
+			.setDesc(t("settings.tableOfContents.desc"))
+			.addDropdown((d) =>
+				d
+					.addOption("never", t("settings.tableOfContents.never"))
+					.addOption("combined", t("settings.tableOfContents.combined"))
+					.addOption("always", t("settings.tableOfContents.always"))
+					.setValue(s.tableOfContents)
+					.onChange(async (v) => save("tableOfContents", v as PluginSettings["tableOfContents"])),
+			);
+		new Setting(containerEl)
+			.setName(t("settings.combineOrder.name"))
+			.setDesc(t("settings.combineOrder.desc"))
+			.addDropdown((d) =>
+				d
+					.addOption("fileName", t("settings.combineOrder.fileName"))
+					.addOption("frontmatterOrder", t("settings.combineOrder.frontmatterOrder"))
+					.addOption("moc", t("settings.combineOrder.moc"))
+					.setValue(s.combineOrder)
+					.onChange(async (v) => save("combineOrder", v as PluginSettings["combineOrder"])),
+			);
+		new Setting(containerEl)
+			.setName(t("settings.defaultCombine.name"))
+			.setDesc(t("settings.defaultCombine.desc"))
+			.addToggle((tg) => tg.setValue(s.defaultCombine).onChange(async (v) => save("defaultCombine", v)));
 
 		new Setting(containerEl).setName(t("settings.heading.excel")).setHeading();
 		new Setting(containerEl)

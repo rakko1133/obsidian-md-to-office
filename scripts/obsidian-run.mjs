@@ -5,7 +5,7 @@
 //   node scripts/obsidian-run.mjs --mode docx --path word3a --path word3b --set downloadExternalImages=true
 //   node scripts/obsidian-run.mjs --wait-reload        # 配置した main.js を Obsidian が読み込み直すまで待つだけ
 //
-// オプション: --mode mermaid|docx|xlsx（既定 docx）、--path（複数可。空文字で Vault 全体）、--set キー=値（複数可。この実行だけの設定。
+// オプション: --mode mermaid|docx|xlsx|both|summary（既定 docx）、--combine（1 フォルダを 1 つの .docx にまとめる）、--path（複数可。空文字で Vault 全体）、--set キー=値（複数可。この実行だけの設定。
 // 値は JSON として読めればその値、読めなければ文字列）、--timeout 秒（既定 300）、--json（結果をそのまま出す）
 import { existsSync, readFileSync, statSync, unlinkSync, writeFileSync } from "node:fs";
 import { join } from "node:path";
@@ -17,7 +17,7 @@ const RESULT = join(PLUGIN_DIR, "dev-result.json");
 const STATUS = join(PLUGIN_DIR, "dev-status.json");
 
 const args = process.argv.slice(2);
-const opts = { mode: "docx", paths: [], settings: {}, timeout: 300, json: false, waitReload: false };
+const opts = { mode: "docx", paths: [], settings: {}, timeout: 300, json: false, waitReload: false, combine: false };
 for (let i = 0; i < args.length; i++) {
 	const a = args[i];
 	if (a === "--mode") opts.mode = args[++i];
@@ -32,6 +32,7 @@ for (let i = 0; i < args.length; i++) {
 		}
 	} else if (a === "--timeout") opts.timeout = Number(args[++i]);
 	else if (a === "--json") opts.json = true;
+	else if (a === "--combine") opts.combine = true;
 	else if (a === "--wait-reload") opts.waitReload = true;
 	else {
 		console.error(`unknown option: ${a}`);
@@ -71,7 +72,7 @@ if (opts.paths.length === 0) {
 
 const id = randomUUID();
 if (existsSync(RESULT)) unlinkSync(RESULT);
-writeFileSync(REQUEST, JSON.stringify({ id, mode: opts.mode, paths: opts.paths, settings: opts.settings }, null, "\t"));
+writeFileSync(REQUEST, JSON.stringify({ id, mode: opts.mode, paths: opts.paths, settings: opts.settings, combine: opts.combine }, null, "\t"));
 
 let result = null;
 while (Date.now() < deadline) {

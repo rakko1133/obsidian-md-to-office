@@ -19,8 +19,10 @@ export interface ConfirmOptions {
 	/** 出力形式を選べるようにする（Word / Excel / 両方: R8）。形式を変えると、題名と予定を計算し直す */
 	formats?: {
 		initial: OfficeFormat;
+		/** 結合出力のチェックボックスの初期値（C-8）。形式が Word か両方のときだけ出す */
+		combine: boolean;
 		title(format: OfficeFormat): string;
-		plan(format: OfficeFormat, notePath: string): Promise<PlannedOutput[]>;
+		plan(format: OfficeFormat, combine: boolean, notePath: string): Promise<PlannedOutput[]>;
 	};
 }
 
@@ -28,6 +30,8 @@ export interface ConfirmResult {
 	notes: string[];
 	/** 選んだ出力形式（formats を渡したときだけ） */
 	format?: OfficeFormat;
+	/** 結合出力にするか（C-8） */
+	combine?: boolean;
 }
 
 /** 確認画面を開き、実行するノートの一覧（と選んだ出力形式）を返す。キャンセルなら null。 */
@@ -46,6 +50,8 @@ class ConfirmModal extends Modal {
 	private readonly noteDetailEls = new Map<string, HTMLElement>();
 	private readonly checkboxes = new Map<string, HTMLInputElement>();
 	private format: OfficeFormat | undefined;
+	private combine = false;
+	private combineSetting: Setting | null = null;
 	/** 予定の計算の世代（形式を変えたら、古い計算の結果を捨てる） */
 	private generation = 0;
 
@@ -57,6 +63,15 @@ class ConfirmModal extends Modal {
 		super(app);
 		this.checked = new Set(options.targets);
 		this.format = options.formats?.initial;
+		this.combine = options.formats?.combine ?? false;
+	}
+
+	/** 予定を計算し直す（形式・結合出力を変えたとき）。 */
+	private replan(): void {
+		this.plans.clear();
+		this.totalsEl.setText(t("confirm.calculating"));
+		for (const el of this.noteSummaryEls.values()) el.setText(`  ${t("confirm.calculating")}`);
+		void this.computePlans();
 	}
 
 	override onOpen(): void {
@@ -75,12 +90,17 @@ class ConfirmModal extends Modal {
 					.onChange((v) => {
 						this.format = v as OfficeFormat;
 						this.setTitle(formats.title(this.format));
-						this.plans.clear();
-						this.totalsEl.setText(t("confirm.calculating"));
-						for (const el of this.noteSummaryEls.values()) el.setText(`  ${t("confirm.calculating")}`);
-						void this.computePlans();
+						this.combineSetting?.settingEl.toggle(this.format !== "excel");
+						this.replan();
 					}),
 			);
+			this.combineSetting = new Setting(contentEl).setName(t("confirm.combine")).addToggle((tg) =>
+				tg.setValue(this.combine).onChange((v) => {
+					this.combine = v;
+					this.replan();
+				}),
+			);
+			this.combineSetting.settingEl.toggle(this.format !== "excel");
 		}
 
 		this.summaryEl = contentEl.createEl("p");
@@ -97,7 +117,12 @@ class ConfirmModal extends Modal {
 				this.runButton = b;
 				b.setButtonText(t("confirm.run"))
 					.setCta()
-					.onClick(() => this.finish({ notes: [...this.options.targets].filter((p) => this.checked.has(p)), ...(this.format ? { format: this.format } : {}) }));
+					.onClick(() =>
+							this.finish({
+								notes: [...this.options.targets].filter((p) => this.checked.has(p)),
+								...(this.format ? { format: this.format, combine: this.combine && this.format !== "excel" } : {}),
+							}),
+						);
 			});
 
 		this.updateSummary();
@@ -173,12 +198,13 @@ class ConfirmModal extends Modal {
 	private async computePlans(): Promise<void> {
 		const generation = ++this.generation;
 		const format = this.format;
+		const combine = this.combine && format !== "excel";
 		const formats = this.options.formats;
 		for (const note of this.options.targets) {
 			if (this.resolved || generation !== this.generation) return;
 			let plans: PlannedOutput[] = [];
 			try {
-				plans = formats && format ? await formats.plan(format, note) : await this.options.plan(note);
+				plans = formats && format ? await formats.plan(format, combine, note) : await this.options.plan(note);
 			} catch {
 				plans = [];
 			}
