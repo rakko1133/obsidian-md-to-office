@@ -104,6 +104,17 @@ Obsidian を使う確認は自動化していない（G5）。テスト用 Vault
 - [ ] E1: 書き出した後、`_export/` の中に `.tmp` で終わるファイルがない。元のノートの更新日時が変わっていない
 - [ ] E2: 結果レポートに件数（成功・スキップ・失敗）と警告が出る。`phase1/folder-a/broken.md` は失敗、`no-diagram.md` はスキップになる。`test-vault/.obsidian/plugins/batch-office-export/export-manifest.json` に、`_export/...` の相対パスで記録されている
 
+## フェーズ 4b の手動確認（完了条件 A）
+
+開発用の自動実行で確かめる（画面は操作しない）。`npm run build:dev` → `npm run deploy:test-vault` → 次のコマンド → `npm run preview:export`。
+
+- [x] アウトライン形式（2026-11-18 Claude が確認）: `npm run obsidian:run -- --mode xlsx --path excel/outline --set excelOutlineMode=true`。見出しが H1・H2・H3 の列に分かれ、H4 とコードは本文の列。リストの字下げ、☐ / ☑、表は本文の列から右へ。行のグループ化で折りたためる。Excel で開ける
+- [x] 「元ノート」「見出し」の列: `--mode xlsx --path excel/01-types.md --set excelSourceColumns=true`。表の左に元ノート（リンク）と見出しの列
+- [x] Vault 全体の集計: `--mode summary --path ""`。`_export/test-vault_集計.xlsx` に目次・プロパティ（1 ノート 1 行、期日は日付型）・タスク（Vault 全体、期日は日付型、優先度は別の列、ノートはリンク）・Dataview（結果の表を「ノート名: クエリ」の表題付きで）
+- [x] 両方: `--mode both --path excel`。ノートごとの .docx と、フォルダごとの .xlsx の両方ができる
+- [ ] 確認画面の出力形式の選択（画面の確認。ドロップダウンで形式を変えると予定が変わる）
+- [ ] 確認の後、`npm run build` の本番ビルドに戻して配置する
+
 ## フェーズ 4a の手動確認（完了条件 A）
 
 準備: `npm run build:dev` → `npm run deploy:test-vault` → Obsidian でプラグインを無効 → 有効にする。サンプルは `test-vault/excel/`（5 本と、サブフォルダ `sub/`・埋め込み用の `parts/`）。フォルダ `excel` を右クリック →「Excel（.xlsx）に変換」。各 .xlsx を Excel で開くか、一覧ページ（`npm run preview:export`）で確かめる。
