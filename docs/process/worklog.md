@@ -8,7 +8,13 @@
 
 ---
 
-## 2026-11-18 フェーズ 2 の実装（手動確認待ち）
+## 2026-11-18 フェーズ 2 完了（タグ 0.2.0）
+
+- ユーザーがテスト用 Vault の `word/` の 11 本を Word と LibreOffice で開き、完了条件 A〜C を確認した
+- `release: 0.2.0` → `feat/docx-basic` を main にマージ → タグ `0.2.0`。マージ後の main でビルド（1.35 MB）とテスト 97 件が通ることを確認
+- 次: フェーズ 3（Word の要素の拡充: リンク・ノート埋め込み・画像・コールアウト・コードの色付け・脚注・数式・frontmatter・コメントの削除・他プラグインの記法）。始めるときに、Wikilink・コールアウトを構文解析と変換のどちらの段で扱うかを決める
+
+## 2026-11-18 フェーズ 2 の実装
 
 - 作ったもの（`feat/docx-basic`）
   - コア: 構文解析と変換の段（`src/core/markdown.ts`。remark-gfm・remark-frontmatter、変換の配列: Mermaid の連番・ハイライト・タスクの独自の状態・未対応の印付け）、.docx のレンダラ（`src/core/docx-render.ts`）、ノート 1 件の変換とドライラン（`src/core/docx-export.ts`）
