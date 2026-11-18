@@ -1,55 +1,72 @@
 // 起動方法の登録（R2）: ファイル・フォルダの右クリック、複数選択の右クリック、コマンド「現在のノート」「Vault 全体」。
-import type { TAbstractFile } from "obsidian";
-import { t } from "../i18n";
+// 「Mermaid 画像として保存」（フェーズ 1）と「Word に変換」（フェーズ 2）を、同じ 4 つの起動方法から呼べるようにする。
+import type { Menu, TAbstractFile } from "obsidian";
+import { t, type MessageKey } from "../i18n";
 import { hasConvertibleItem, type TargetSource } from "./collect";
-import { saveMermaidImages } from "./export-mermaid";
+import { runExport, type ExportMode } from "./export-runner";
 import type BatchOfficeExportPlugin from "../main";
 
+interface ModeEntry {
+	mode: ExportMode;
+	menu: MessageKey;
+	icon: string;
+	activeCommand: { id: string; name: MessageKey };
+	vaultCommand: { id: string; name: MessageKey };
+}
+
+const ENTRIES: readonly ModeEntry[] = [
+	{
+		mode: "docx",
+		menu: "menu.convertWord",
+		icon: "file-text",
+		activeCommand: { id: "convert-word-current-note", name: "command.convertWordActive" },
+		vaultCommand: { id: "convert-word-vault", name: "command.convertWordVault" },
+	},
+	{
+		mode: "mermaid",
+		menu: "menu.saveMermaid",
+		icon: "image-down",
+		activeCommand: { id: "save-mermaid-images-current-note", name: "command.saveMermaidActive" },
+		vaultCommand: { id: "save-mermaid-images-vault", name: "command.saveMermaidVault" },
+	},
+];
+
 export function registerCommands(plugin: BatchOfficeExportPlugin): void {
-	const run = (source: TargetSource): void => {
-		void saveMermaidImages({ app: plugin.app, settings: plugin.settings, pluginDir: pluginDir(plugin) }, source);
+	const run = (mode: ExportMode, source: TargetSource): void => {
+		void runExport({ app: plugin.app, settings: plugin.settings, pluginDir: pluginDir(plugin) }, mode, source);
+	};
+	const addItems = (menu: Menu, items: TAbstractFile[]): void => {
+		if (!hasConvertibleItem(items)) return;
+		for (const entry of ENTRIES) {
+			menu.addItem((item) =>
+				item
+					.setTitle(t(entry.menu))
+					.setIcon(entry.icon)
+					.onClick(() => run(entry.mode, { kind: "items", items })),
+			);
+		}
 	};
 
-	plugin.registerEvent(
-		plugin.app.workspace.on("file-menu", (menu, file: TAbstractFile) => {
-			if (!hasConvertibleItem([file])) return;
-			menu.addItem((item) =>
-				item
-					.setTitle(t("menu.saveMermaid"))
-					.setIcon("image-down")
-					.onClick(() => run({ kind: "items", items: [file] })),
-			);
-		}),
-	);
+	plugin.registerEvent(plugin.app.workspace.on("file-menu", (menu, file: TAbstractFile) => addItems(menu, [file])));
+	plugin.registerEvent(plugin.app.workspace.on("files-menu", (menu, files: TAbstractFile[]) => addItems(menu, files)));
 
-	plugin.registerEvent(
-		plugin.app.workspace.on("files-menu", (menu, files: TAbstractFile[]) => {
-			if (!hasConvertibleItem(files)) return;
-			menu.addItem((item) =>
-				item
-					.setTitle(t("menu.saveMermaid"))
-					.setIcon("image-down")
-					.onClick(() => run({ kind: "items", items: files })),
-			);
-		}),
-	);
-
-	plugin.addCommand({
-		id: "save-mermaid-images-current-note",
-		name: t("command.saveMermaidActive"),
-		checkCallback: (checking) => {
-			const file = plugin.app.workspace.getActiveFile();
-			if (!file || file.extension !== "md") return false;
-			if (!checking) run({ kind: "active" });
-			return true;
-		},
-	});
-
-	plugin.addCommand({
-		id: "save-mermaid-images-vault",
-		name: t("command.saveMermaidVault"),
-		callback: () => run({ kind: "vault" }),
-	});
+	for (const entry of ENTRIES) {
+		plugin.addCommand({
+			id: entry.activeCommand.id,
+			name: t(entry.activeCommand.name),
+			checkCallback: (checking) => {
+				const file = plugin.app.workspace.getActiveFile();
+				if (!file || file.extension !== "md") return false;
+				if (!checking) run(entry.mode, { kind: "active" });
+				return true;
+			},
+		});
+		plugin.addCommand({
+			id: entry.vaultCommand.id,
+			name: t(entry.vaultCommand.name),
+			callback: () => run(entry.mode, { kind: "vault" }),
+		});
+	}
 }
 
 function pluginDir(plugin: BatchOfficeExportPlugin): string {

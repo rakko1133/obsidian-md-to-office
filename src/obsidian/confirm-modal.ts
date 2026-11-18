@@ -1,16 +1,18 @@
 // 実行前の確認画面（02・R2・R3 のドライラン）。
 // フォルダごとにまとめたチェックボックス付きの一覧を出し、ノートごとの出力パスと予定動作を表示する。
 import { type App, Modal, Setting } from "obsidian";
-import type { PlannedImage } from "../core/mermaid-export";
+import type { PlannedOutput } from "../core/docx-export";
+import type { PlannedAction } from "../core/types";
 import { dirName } from "../core/output-plan";
 import { t } from "../i18n";
 
 export interface ConfirmOptions {
+	title: string;
 	targets: readonly string[];
 	excludedCount: number;
 	outputLabel: string;
 	/** ノート 1 件のドライラン（描画しない） */
-	plan: (notePath: string) => Promise<PlannedImage[]>;
+	plan: (notePath: string) => Promise<PlannedOutput[]>;
 }
 
 /** 確認画面を開き、実行するノートの一覧を返す。キャンセルなら null。 */
@@ -20,7 +22,7 @@ export function confirmTargets(app: App, options: ConfirmOptions): Promise<strin
 
 class ConfirmModal extends Modal {
 	private readonly checked: Set<string>;
-	private readonly plans = new Map<string, PlannedImage[]>();
+	private readonly plans = new Map<string, PlannedOutput[]>();
 	private resolved = false;
 	private summaryEl!: HTMLElement;
 	private totalsEl!: HTMLElement;
@@ -40,7 +42,7 @@ class ConfirmModal extends Modal {
 
 	override onOpen(): void {
 		const { contentEl } = this;
-		this.setTitle(t("confirm.title"));
+		this.setTitle(this.options.title);
 		contentEl.addClass("batch-office-export-confirm");
 
 		this.summaryEl = contentEl.createEl("p");
@@ -123,35 +125,22 @@ class ConfirmModal extends Modal {
 
 	private updateTotals(): void {
 		if (this.plans.size < this.options.targets.length) return;
-		let create = 0;
-		let unchanged = 0;
-		for (const [note, plans] of this.plans) {
-			if (!this.checked.has(note)) continue;
-			create += plans.filter((p) => p.action === "create").length;
-			unchanged += plans.filter((p) => p.action === "unchanged").length;
-		}
-		this.totalsEl.setText(t("confirm.totals", { create: String(create), unchanged: String(unchanged) }));
+		const all = [...this.plans].filter(([note]) => this.checked.has(note)).flatMap(([, plans]) => plans);
+		this.totalsEl.setText(t("confirm.totals", { summary: actionSummary(all) || "0" }));
 	}
 
 	/** ノートごとにドライランを計算して表示する。1 件ごとに制御を返して画面を固めない。 */
 	private async computePlans(): Promise<void> {
 		for (const note of this.options.targets) {
 			if (this.resolved) return;
-			let plans: PlannedImage[] = [];
+			let plans: PlannedOutput[] = [];
 			try {
 				plans = await this.options.plan(note);
 			} catch {
 				plans = [];
 			}
 			this.plans.set(note, plans);
-			const diagrams = new Set(plans.map((p) => p.diagramIndex)).size;
-			this.noteSummaryEls.get(note)?.setText(
-				`  ${t("confirm.noteSummary", {
-					diagrams: String(diagrams),
-					create: String(plans.filter((p) => p.action === "create").length),
-					unchanged: String(plans.filter((p) => p.action === "unchanged").length),
-				})}`,
-			);
+			this.noteSummaryEls.get(note)?.setText(`  ${actionSummary(plans) || t("confirm.noOutputs")}`);
 			const details = this.noteDetailEls.get(note);
 			if (details) {
 				details.empty();
@@ -173,4 +162,14 @@ function groupByFolder(paths: readonly string[]): Map<string, string[]> {
 		map.set(folder, [...(map.get(folder) ?? []), p]);
 	}
 	return map;
+}
+
+const ACTION_ORDER: readonly PlannedAction[] = ["create", "overwrite", "unchanged", "rename", "skip"];
+
+/** 予定動作ごとの件数の要約（例: 「新規 2 · 変更なし 1」）。 */
+function actionSummary(plans: readonly PlannedOutput[]): string {
+	return ACTION_ORDER.map((a) => [a, plans.filter((p) => p.action === a).length] as const)
+		.filter(([, n]) => n > 0)
+		.map(([a, n]) => `${t(`action.${a}`)} ${n}`)
+		.join(" · ");
 }
