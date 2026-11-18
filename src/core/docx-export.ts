@@ -164,24 +164,25 @@ export async function exportDocxNote(
 		}),
 	);
 
-	files.push(await writeWithConflictPolicy(ownOutput, bytes, settings.onConflict, deps, signal));
+	files.push(await writeWithConflictPolicy(ownOutput, bytes, settings.onConflict, deps, signal, "docx"));
 	return { notePath, status: aggregateStatus(files), files, warnings, deleted };
 }
 
-/** 同名ファイルの設定（R3）に従って書き込む。予定動作は書き込みの時点の状態で判定し直す。 */
-async function writeWithConflictPolicy(
+/** 同名ファイルの設定（R3）に従って書き込む。予定動作は書き込みの時点の状態で判定し直す（.docx・.xlsx で共用）。 */
+export async function writeWithConflictPolicy(
 	output: OutputRef,
 	bytes: Uint8Array,
 	onConflict: PluginSettings["onConflict"],
 	deps: Pick<MermaidExportDeps, "writer">,
 	signal: AbortSignal,
+	kind: "docx" | "xlsx",
 ): Promise<FileResult> {
 	const action = plannedAction(await deps.writer.exists(output), false, onConflict);
-	if (action === "skip") return { output, kind: "docx", status: "skipped", reason: "exists" };
+	if (action === "skip") return { output, kind, status: "skipped", reason: "exists" };
 	let target = output;
 	if (action === "rename") target = await renamedRef(output, (ref) => deps.writer.exists(ref));
 	const written = await deps.writer.write(target, bytes, signal);
-	return { output: target, kind: "docx", ...written };
+	return { output: target, kind, ...written };
 }
 
 /** 連番を付けた出力先 `name (1).docx`。 */

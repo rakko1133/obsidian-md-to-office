@@ -1,12 +1,15 @@
 // 書き出しの全体の流れ（01→02→03→（04・06・07）→09→10）。モードごとに、ドライランとノート 1 件の処理だけを差し替える。
 // - mermaid: Mermaid 画像として保存（R1 の単独保存・フェーズ 1）
 // - docx: Word に変換（フェーズ 2。フェーズ 3a でリンク・埋め込み・画像などを足した）
+// - xlsx: Excel に変換（フェーズ 4a）。1 フォルダ = 1 ブックでは、全ノートの処理の後にブックを完成させる（D7）
 import { FileSystemAdapter, Notice, TFile, type App } from "obsidian";
 import * as nodePath from "path";
 import { exportDocxNote, planDocxNote, type PlannedOutput, type VaultEnvironment } from "../core/docx-export";
 import { applyResults } from "../core/manifest";
 import { exportMermaidNote, planMermaidNote, type MermaidExportDeps } from "../core/mermaid-export";
 import { runSequential } from "../core/run";
+import { XlsxRun, planXlsxNote, xlsxUnit } from "../core/xlsx-export";
+import type { XlsxLabels } from "../core/xlsx-render";
 import type { PluginSettings } from "../core/settings";
 import { filterTargets } from "../core/targets";
 import type { ManifestSnapshot, NoteResult, OutputRef, Warning } from "../core/types";
@@ -21,7 +24,7 @@ import { createVaultEnvironment } from "./vault-env";
 import { ProgressNotice } from "./progress";
 import { showReport } from "./report-modal";
 
-export type ExportMode = "mermaid" | "docx";
+export type ExportMode = "mermaid" | "docx" | "xlsx";
 
 export interface ExportHost {
 	app: App;
@@ -38,6 +41,10 @@ interface ModeContext {
 	vault: VaultEnvironment;
 	/** 今回の実行の対象（確認画面で選んだノート）。内部リンクの変換対象の範囲（A-18） */
 	selected: ReadonlySet<string>;
+	/** 確認画面に出す候補の件数（ドライランでの Excel の出力単位の判定: R8） */
+	targetCount: number;
+	/** Excel のブックの状態（確認画面の後に作る） */
+	xlsx?: XlsxRun;
 }
 
 /** モードごとの違い: 確認画面の題名、ドライラン、ノート 1 件の処理。 */
@@ -45,6 +52,10 @@ interface ModeDefinition {
 	title: () => string;
 	plan(ctx: ModeContext, notePath: string): Promise<PlannedOutput[]>;
 	process(ctx: ModeContext, notePath: string, signal: AbortSignal, manifest: ManifestSnapshot): Promise<NoteResult>;
+	/** 確認画面の後、変換を始める前（Excel のブックの状態を作る） */
+	start?(ctx: ModeContext, selected: readonly string[]): void;
+	/** 全ノートの処理の後（中断・fail-fast でも呼ぶ。1 フォルダ = 1 ブックを完成させる） */
+	finish?(ctx: ModeContext, results: NoteResult[]): Promise<void>;
 }
 
 const MODES: Record<ExportMode, ModeDefinition> = {
@@ -64,7 +75,30 @@ const MODES: Record<ExportMode, ModeDefinition> = {
 		process: ({ settings, deps, app, vault, selected }, path, signal, manifest) =>
 			exportDocxNote(path, signal, settings, manifest, { ...deps, strictLineBreaks: readStrictLineBreaks(app), vault, convertedNotes: selected }),
 	},
+	xlsx: {
+		title: () => t("confirm.titleExcel"),
+		plan: ({ settings, deps, vault, targetCount }, path) =>
+			planXlsxNote(path, xlsxUnit(targetCount, settings), settings, vault.vaultName, (ref: OutputRef) => deps.writer.exists(ref)),
+		start: (ctx, selected) => {
+			ctx.xlsx = new XlsxRun(ctx.settings, selected, { readNote: ctx.deps.readNote, writer: ctx.deps.writer, vault: ctx.vault, labels: xlsxLabels() });
+		},
+		process: ({ xlsx }, path, signal) => xlsx!.addNote(path, signal),
+		finish: ({ xlsx }, results) => xlsx!.finish(results),
+	},
 };
+
+/** .xlsx の目次シートなどの文字（UI の言語に合わせる）。 */
+function xlsxLabels(): XlsxLabels {
+	return {
+		toc: t("xlsx.toc"),
+		sheet: t("xlsx.toc.sheet"),
+		source: t("xlsx.toc.source"),
+		heading: t("xlsx.toc.heading"),
+		tableCount: t("xlsx.toc.tables"),
+		column: (n) => t("xlsx.column", { n: String(n) }),
+		table: (n) => t("xlsx.table", { n: String(n) }),
+	};
+}
 
 /** Obsidian の「厳密な改行」の設定（A-2）。非公開 API なので、読めなければ undefined。 */
 function readStrictLineBreaks(app: App): boolean | undefined {
@@ -128,7 +162,14 @@ export async function runExport(host: ExportHost, mode: ExportMode, source: Targ
 			if (!(file instanceof TFile)) throw new Error(`not found: ${path}`);
 			return app.vault.cachedRead(file);
 		};
-		const ctx: ModeContext = { settings, app, deps: { readNote, renderer, cache, writer }, vault: await createVaultEnvironment(app), selected: new Set() };
+		const ctx: ModeContext = {
+			settings,
+			app,
+			deps: { readNote, renderer, cache, writer },
+			vault: await createVaultEnvironment(app),
+			selected: new Set(),
+			targetCount: targets.length,
+		};
 
 		// 02: 実行前の確認画面（ドライラン）
 		const outputLabel =
@@ -146,6 +187,7 @@ export async function runExport(host: ExportHost, mode: ExportMode, source: Targ
 		});
 		if (!selected || selected.length === 0) return;
 		ctx.selected = new Set(selected);
+		definition.start?.(ctx, selected);
 
 		// 10: マニフェストは開始時に 1 回だけ読む（D4）
 		const { snapshot, warnings: loadWarnings } = await store.load();
@@ -163,6 +205,8 @@ export async function runExport(host: ExportHost, mode: ExportMode, source: Targ
 				isCancelled: progress.isCancelled,
 				onProgress: (done, total, path) => progress.update(done, total, path),
 			});
+			// 束ねる出力（1 フォルダ = 1 ブック）を完成させる。中断・fail-fast でも処理済みの分で完成させる
+			await definition.finish?.(ctx, outcome.results);
 		} finally {
 			progress.hide();
 		}

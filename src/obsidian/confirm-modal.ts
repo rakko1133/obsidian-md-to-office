@@ -125,7 +125,9 @@ class ConfirmModal extends Modal {
 
 	private updateTotals(): void {
 		if (this.plans.size < this.options.targets.length) return;
-		const all = [...this.plans].filter(([note]) => this.checked.has(note)).flatMap(([, plans]) => plans);
+		const planned = [...this.plans].filter(([note]) => this.checked.has(note)).flatMap(([, plans]) => plans);
+		// 束ねた出力（1 フォルダ = 1 ブック）は、複数のノートが同じ出力を予定するので、出力ごとに 1 回だけ数える
+		const all = [...new Map(planned.map((p) => [`${p.output.location}:${p.output.path}`, p])).values()];
 		this.totalsEl.setText(t("confirm.totals", { summary: actionSummary(all) || "0" }));
 	}
 
