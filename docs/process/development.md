@@ -86,17 +86,13 @@ Obsidian のコミュニティプラグインは、`manifest.json` の `version`
 4. `gh release create x.y.z main.js manifest.json styles.css --title x.y.z --notes "<変更点>"`（初回はリポジトリを公開に切り替えてから: `gh repo edit --visibility public --accept-visibility-change-consequences`）
 5. 作業が終わったら `npm run build:dev` と `npm run deploy:test-vault` で、テスト用 Vault を開発用ビルドに戻す（本番ビルドには開発用の自動実行が入っていない）
 
-初回だけ、コミュニティプラグインに申請する: `obsidianmd/obsidian-releases` をフォークし、`community-plugins.json` の末尾に次の項目を足して PR を出す。PR の本文はリポジトリの PR テンプレートのチェックリストに答える。
+初回だけ、コミュニティプラグインに申請する（2026-11-18 時点の公式の手順。以前の `obsidianmd/obsidian-releases` への PR ではなくなった）:
 
-```json
-{
-	"id": "batch-office-export",
-	"name": "Batch Office Export",
-	"author": "rakko1133",
-	"description": "Batch-convert notes to Word (.docx) and Excel (.xlsx), with Mermaid diagrams as images.",
-	"repo": "rakko1133/obsidian-md-to-office"
-}
-```
+1. [community.obsidian.md](https://community.obsidian.md) に Obsidian のアカウントでサインインし、プロフィールに GitHub のアカウントをつなぐ（リポジトリの持ち主かを確かめるため）
+2. プラグインを追加する（リポジトリ `rakko1133/obsidian-md-to-office`）。ディレクトリは既定のブランチの先頭の `manifest.json` を読み、その `version` の GitHub Release から配布物を取る
+3. 自動レビューの指摘が出たら、直して版を上げた Release を出す。エラーが残っている間は Obsidian からインストールできない
+
+自動レビューの前に、公式の ESLint プラグイン（`eslint-plugin-obsidianmd`）の推奨設定で `src/` を検査しておく。1.0.1 の時点ではプロジェクトの依存に入れておらず、作業用のフォルダに `eslint@9`・`eslint-plugin-obsidianmd`・`typescript-eslint@8`・`typescript@5` を入れ、推奨設定（`obsidianmd.configs.recommended`、`parserOptions.projectService: true`）で実行した。エラーは 0 件、警告 11 件（docx の `TextRun` の `bold` などを `String.prototype.bold` と取り違える誤検出、core のタイマー、設定画面の宣言的 API への移行）
 
 ## フェーズ 0 の手動確認（完了条件 B1〜B4）
 
