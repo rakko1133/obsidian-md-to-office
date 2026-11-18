@@ -381,14 +381,18 @@ Vault 全体の集計（A-34）
 - README: 英語の `README.md` と日本語の `README.ja.md`。機能・動作環境（デスクトップ版のみ）・インストール・使い方・設定・注意（ネットワークの使用は「外部の画像をダウンロードする」をオンにしたときだけ、Vault の外のファイル、`dataviewjs` のコードが実行されること、プラグインのフォルダに残すファイル）。「Word」「Excel」はファイル形式の呼び名で、Microsoft とは関係がないことを書く
 - 同梱する依存のライセンス文（G1）: `scripts/third-party-notices.mjs` が本番ビルドと同じ設定の esbuild の metafile から main.js に入るパッケージを数え、ライセンス文を `THIRD_PARTY_NOTICES.md` にまとめる（`docx`・`exceljs` が自分のビルドに埋め込んだ依存も含む。ライセンスファイルのないパッケージは package.json のライセンスの定型文で補う）。配布物は main.js 単体で Vault に置かれるので、本番ビルドは同じ内容を main.js の末尾にコメントで入れる。`npm run build` は内容が古ければ止まる
 - プラグインの ID・名前: 公式の一覧（`community-plugins.json`、2026-11-18 時点 10,551 件）と、取り下げの一覧に `batch-office-export`・「Batch Office Export」はない
-- リリース: タグ `1.0.0` の GitHub Release に `main.js`・`manifest.json`・`styles.css` を添付する（`docs/process/development.md` の「公開とリリースの手順」）。リポジトリの公開・Release の作成・申請の PR は外部に公開する操作なので、ユーザーの指示を受けてから行う
+- リリース: タグ `1.0.0` の GitHub Release に `main.js`・`manifest.json`・`styles.css` を添付する（`docs/process/development.md` の「公開とリリースの手順」）。リポジトリの公開・Release の作成・申請は外部に公開する操作なので、ユーザーの指示を受けてから行う
+- コミットの作者のメールアドレス（公開時に追加・ユーザーの決定）: 公開すると履歴の作者欄が見えるので、全コミットと注釈付きタグの作者・コミッターを GitHub の noreply のアドレスに書き換え、非公開のうちにリモートの `main` とタグを置き換えた。以後のコミットも noreply のアドレスにする（リポジトリの `user.email`）
+- 申請の方法（公開時に追加）: 公式の手順が `obsidianmd/obsidian-releases` への PR から、[community.obsidian.md](https://community.obsidian.md) での登録（Obsidian のアカウントでサインインし、GitHub のアカウントをつなぐ）に変わっていた。サインインはユーザー本人が行う
+- 自動レビューへの備え（公開時に追加）: 登録すると公式の ESLint プラグイン（`eslint-plugin-obsidianmd`）相当の自動レビューが走り、エラーが残るとインストールできない。推奨設定で検査してエラー（不要な型の断定、インラインのスタイル、`this` の外れるメソッドの受け渡しなど）を 0 件にし、`1.0.1` として出し直す
 
 ### フェーズ 6 の完了条件（2026-11-18・Claude 推奨）
 
 - [x] A. 文書: README（英語・日本語）・LICENSE・THIRD_PARTY_NOTICES がリポジトリの直下にある。README の機能・コマンド名・設定の区分が UI の文字列と合っている
 - [x] B. ビルド: 本番ビルドの main.js の末尾に同梱の依存のライセンス文が入り、構文として読める。単体テストが通る。開発用ビルドで Obsidian の変換が動く
-- [ ] C. 公開（ユーザーの指示を受けてから）: リポジトリを公開に切り替える。タグ `1.0.0` を push し、GitHub Release を作る。`obsidianmd/obsidian-releases` に申請の PR を出す
-- [x] D. 記録とリポジトリ: 依存一覧・手順書・作業記録に反映する。`feat/release-prep` で作業し、`release: 1.0.0` をコミットする（マージとタグはユーザーの確認のあと）
+- [x] C. 公開（2026-11-18 ユーザーの指示で実施）: リポジトリを公開に切り替え、タグ `1.0.0`・`1.0.1` を push して GitHub Release を作る
+- [ ] E. 申請（ユーザーが行う）: community.obsidian.md でプラグインを登録し、自動レビューを通す
+- [x] D. 記録とリポジトリ: 依存一覧・手順書・作業記録に反映する。`feat/release-prep` で作業し、マージしてタグ `1.0.0` を付ける。レビューの指摘の修正は `fix/community-review` で作業し、タグ `1.0.1`
 
 ---
 
