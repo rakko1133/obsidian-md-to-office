@@ -146,11 +146,11 @@ function blockLines(node: RootContent): PhrasingContent[][] {
 			const mark = item.checked === true ? "☑ " : item.checked === false ? "☐ " : node.ordered ? "" : "• ";
 			const lines = item.children.flatMap((c) => blockLines(c as RootContent));
 			if (lines.length === 0) return [];
-			lines[0] = [{ type: "text", value: mark }, ...lines[0]!];
+			lines[0] = [{ type: "text", value: mark }, ...lines[0]];
 			return lines;
 		});
 	}
-	if (node.type === "code") return node.value.split("\n").map((v) => [{ type: "inlineCode", value: v } as PhrasingContent]);
+	if (node.type === "code") return node.value.split("\n").map((v) => [{ type: "inlineCode", value: v }]);
 	if ("children" in node) return (node.children as RootContent[]).flatMap(blockLines);
 	return [];
 }
@@ -258,8 +258,8 @@ function mergeTexts(nodes: PhrasingContent[]): PhrasingContent[] {
 /** 段落の前後の空白と改行を除く。 */
 function trimPhrasing(nodes: PhrasingContent[]): PhrasingContent[] {
 	const out = [...nodes];
-	while (out.length > 0 && (out[0]!.type === "break" || (out[0]!.type === "text" && out[0]!.value.trim() === ""))) out.shift();
-	while (out.length > 0 && (out[out.length - 1]!.type === "break" || (out[out.length - 1]!.type === "text" && (out[out.length - 1] as { value: string }).value.trim() === ""))) out.pop();
+	while (out.length > 0 && (out[0].type === "break" || (out[0].type === "text" && out[0].value.trim() === ""))) out.shift();
+	while (out.length > 0 && (out[out.length - 1].type === "break" || (out[out.length - 1].type === "text" && (out[out.length - 1] as { value: string }).value.trim() === ""))) out.pop();
 	const first = out[0];
 	if (first?.type === "text") out[0] = { ...first, value: first.value.replace(/^\s+/, "") };
 	const last = out[out.length - 1];

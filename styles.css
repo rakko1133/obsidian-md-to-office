@@ -20,3 +20,22 @@
 	font-size: var(--font-ui-smaller);
 	color: var(--text-muted);
 }
+
+/* Batch Office Export: 設定画面の余白の入力欄 */
+.batch-office-export-margin-input {
+	width: 4.5em;
+}
+
+/* Batch Office Export: 変換のときに画面の外で描画する領域（他のプラグインの描画・テーマの色の読み取り） */
+.batch-office-export-offscreen {
+	position: fixed;
+	left: -10000px;
+	top: 0;
+	width: 800px;
+	visibility: hidden;
+	pointer-events: none;
+}
+
+.batch-office-export-callout-probe {
+	color: var(--callout-color);
+}

@@ -2,7 +2,7 @@
 // 構文解析: remark-parse + remark-gfm（表・取り消し線・タスク・URL の自動リンク・脚注）+ remark-math（数式: フェーズ 3b）+ remark-frontmatter（YAML）。
 // 変換: 処理の配列を順に適用する（H3 の拡張に備え、処理を 1 つずつ足せる形にする）。
 import type {} from "mdast-util-math";
-import type { Code, Parent, PhrasingContent, Root, RootContent, Text } from "mdast";
+import type { Code, Parent, PhrasingContent, Root, RootContent } from "mdast";
 import remarkFrontmatter from "remark-frontmatter";
 import remarkGfm from "remark-gfm";
 import remarkMath from "remark-math";
@@ -34,7 +34,7 @@ declare module "mdast" {
 }
 
 export function parseMarkdown(markdown: string): Root {
-	return unified().use(remarkParse).use(remarkGfm).use(remarkMath).use(remarkFrontmatter, ["yaml"]).parse(markdown) as Root;
+	return unified().use(remarkParse).use(remarkGfm).use(remarkMath).use(remarkFrontmatter, ["yaml"]).parse(markdown);
 }
 
 export interface TransformContext {
@@ -55,7 +55,7 @@ export function transformTree(tree: Root, transforms: readonly Transform[] = PHA
 /** Mermaid のコードブロックを、文書の順に巡回する。取り出し（mermaid.ts）と連番付けで同じ順序を使う。 */
 export function visitMermaidCodes(tree: Root, visit: (node: Code) => void): void {
 	walk(tree, (node) => {
-		if (node.type === "code" && (node as Code).lang?.toLowerCase() === "mermaid") visit(node as Code);
+		if (node.type === "code" && node.lang?.toLowerCase() === "mermaid") visit(node);
 	});
 }
 
@@ -74,23 +74,23 @@ export function markHighlight(tree: Root): void {
 	walkParents(tree, (parent) => {
 		const next: RootContent[] = [];
 		let changed = false;
-		for (const child of parent.children as RootContent[]) {
+		for (const child of parent.children) {
 			if (child.type !== "text" || !child.value.includes("==")) {
 				next.push(child);
 				continue;
 			}
 			let last = 0;
-			const value = (child as Text).value;
+			const value = child.value;
 			for (const m of value.matchAll(HIGHLIGHT)) {
 				changed = true;
-				if (m.index! > last) next.push({ type: "text", value: value.slice(last, m.index) });
-				next.push({ type: "highlight", children: [{ type: "text", value: m[1]! }] } as unknown as RootContent);
-				last = m.index! + m[0].length;
+				if (m.index > last) next.push({ type: "text", value: value.slice(last, m.index) });
+				next.push({ type: "highlight", children: [{ type: "text", value: m[1] }] } as unknown as RootContent);
+				last = m.index + m[0].length;
 			}
 			if (last === 0) next.push(child);
 			else if (last < value.length) next.push({ type: "text", value: value.slice(last) });
 		}
-		if (changed) (parent as Parent).children = next as Parent["children"];
+		if (changed) parent.children = next;
 	});
 }
 
@@ -106,7 +106,7 @@ export function markTaskStates(tree: Root): void {
 		const text = first.children[0];
 		if (text?.type !== "text") return;
 		const m = /^\[(.)\] /.exec(text.value);
-		const symbol = m ? TASK_SYMBOLS[m[1]!] : undefined;
+		const symbol = m ? TASK_SYMBOLS[m[1]] : undefined;
 		if (!m || !symbol) return;
 		text.value = text.value.slice(m[0].length);
 		node.data = { ...node.data, taskSymbol: symbol };
@@ -140,7 +140,7 @@ export function walk(node: AnyNode, visit: (node: RootContent) => void): void {
 /** 子を持つノードを深さ優先で巡回する。visit の中で子を差し替えてよい（差し替えた後の子を巡回する）。 */
 export function walkParents(node: AnyNode, visit: (parent: Parent) => void): void {
 	if ("children" in node) {
-		visit(node as Parent);
+		visit(node);
 		for (const child of node.children as RootContent[]) walkParents(child, visit);
 	}
 }

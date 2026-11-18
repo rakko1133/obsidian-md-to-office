@@ -4,7 +4,7 @@
 // - 数式の画像: プラグインに含めた MathJax（mathjax-full）で SVG にする（A-11 の代替。Obsidian 同梱の MathJax は SVG を作れない）
 // - 外部の画像の取得（A-20 のオプション）、テーマのコールアウトの色（A-6 のオプション）
 import { Component, MarkdownPreviewRenderer, MarkdownRenderer, requestUrl, type App } from "obsidian";
-import { domToMdast, type DomNodeLike } from "../core/dom-to-mdast";
+import { domToMdast } from "../core/dom-to-mdast";
 import { cssColorToHex } from "../core/css-color";
 import { texToSvg } from "../core/math-svg";
 import type { ImageAsset } from "../core/obsidian-syntax";
@@ -20,11 +20,11 @@ const OWN_LANGUAGES = new Set(["mermaid"]);
 const DATAVIEW_LANGUAGES = new Set(["dataview", "dataviewjs"]);
 
 export interface PluginRenderer {
-	renderableLanguage(lang: string): boolean;
-	renderBlock(lang: string, source: string, sourcePath: string, signal?: AbortSignal): Promise<import("mdast").RootContent[] | null>;
-	renderMath(latex: string, display: boolean): Promise<ImageAsset>;
-	fetchImage(url: string): Promise<ImageAsset>;
-	calloutColor(type: string): string | undefined;
+	renderableLanguage: (lang: string) => boolean;
+	renderBlock: (lang: string, source: string, sourcePath: string, signal?: AbortSignal) => Promise<import("mdast").RootContent[] | null>;
+	renderMath: (latex: string, display: boolean) => Promise<ImageAsset>;
+	fetchImage: (url: string) => Promise<ImageAsset>;
+	calloutColor: (type: string) => string | undefined;
 }
 
 export function createPluginRenderer(app: App): PluginRenderer {
@@ -54,10 +54,7 @@ function renderableLanguage(app: App, lang: string): boolean {
 async function renderBlock(app: App, lang: string, source: string, sourcePath: string, signal?: AbortSignal): Promise<import("mdast").RootContent[] | null> {
 	if (signal?.aborted) throw signal.reason instanceof Error ? signal.reason : new Error("aborted");
 	// 画面の外に置く。大きさを測って描くプラグインのため、document にはつなぐ
-	const host = document.createElement("div");
-	host.className = "markdown-rendered batch-office-export-render";
-	host.setAttribute("style", "position: fixed; left: -10000px; top: 0; width: 800px; visibility: hidden; pointer-events: none;");
-	document.body.appendChild(host);
+	const host = activeDocument.body.createDiv({ cls: "markdown-rendered batch-office-export-render batch-office-export-offscreen" });
 	const component = new Component();
 	component.load();
 	try {
@@ -71,7 +68,7 @@ async function renderBlock(app: App, lang: string, source: string, sourcePath: s
 		if (isPlainCode(host)) return null;
 		// Dataview の表の見出しの後ろに小さく出る件数（`<span class="dataview small-text">2</span>`）は見出しの文字ではないので外す
 		for (const count of Array.from(host.querySelectorAll("th .dataview.small-text"))) count.remove();
-		return await domToMdast(host as unknown as DomNodeLike, { image: (el) => rasterize(el as unknown as Element) });
+		return await domToMdast(host, { image: (el) => rasterize(el as unknown as Element) });
 	} finally {
 		component.unload();
 		host.remove();
@@ -138,7 +135,7 @@ async function rasterize(el: Element): Promise<ImageAsset | null> {
 	if (name === "img") {
 		const img = el as HTMLImageElement;
 		if (!img.complete) await img.decode().catch(() => undefined);
-		const canvas = document.createElement("canvas");
+		const canvas = createEl("canvas");
 		canvas.width = img.naturalWidth || 1;
 		canvas.height = img.naturalHeight || 1;
 		canvas.getContext("2d")?.drawImage(img, 0, 0);
@@ -157,10 +154,10 @@ function inlineUses(svg: SVGSVGElement): void {
 		if (!href.startsWith("#")) continue;
 		const id = href.slice(1);
 		if (svg.querySelector(`[id="${CSS.escape(id)}"]`)) continue;
-		const target = document.getElementById(id);
+		const target = activeDocument.getElementById(id);
 		if (!target) continue;
 		if (!defs) {
-			defs = document.createElementNS("http://www.w3.org/2000/svg", "defs");
+			defs = createSvg("defs");
 			svg.insertBefore(defs, svg.firstChild);
 		}
 		defs.appendChild(target.cloneNode(true));
@@ -192,7 +189,7 @@ async function fetchImage(url: string): Promise<ImageAsset> {
 	if (response.status >= 400) throw new Error(`HTTP ${response.status}`);
 	const bytes = new Uint8Array(response.arrayBuffer);
 	if (bytes.byteLength > MAX_DOWNLOAD_BYTES) throw new Error(`larger than ${MAX_DOWNLOAD_BYTES / 1024 / 1024} MB`);
-	const type = (response.headers["content-type"] ?? response.headers["Content-Type"] ?? "").split(";")[0]!.trim().toLowerCase();
+	const type = (response.headers["content-type"] ?? response.headers["Content-Type"] ?? "").split(";")[0].trim().toLowerCase();
 	const fromUrl = /\.([a-z0-9]+)(?:[?#]|$)/i.exec(url)?.[1]?.toLowerCase();
 	const ext = MIME_EXTENSIONS[type] ?? fromUrl ?? "png";
 	return loadImage(bytes, ext === "jpeg" ? "jpg" : ext);
@@ -204,17 +201,9 @@ async function fetchImage(url: string): Promise<ImageAsset> {
  * どちらでもなければ（`color-mix(…)` など）、`color: var(--callout-color)` をブラウザに計算させた色を読む。
  */
 function readCalloutColor(type: string): string | undefined {
-	const wrapper = document.createElement("div");
-	wrapper.className = "markdown-rendered batch-office-export-render";
-	wrapper.setAttribute("style", "position: fixed; left: -10000px; top: 0; visibility: hidden;");
-	const callout = document.createElement("div");
-	callout.className = "callout";
-	callout.setAttribute("data-callout", type);
-	const probe = document.createElement("span");
-	probe.setAttribute("style", "color: var(--callout-color);");
-	callout.appendChild(probe);
-	wrapper.appendChild(callout);
-	document.body.appendChild(wrapper);
+	const wrapper = activeDocument.body.createDiv({ cls: "markdown-rendered batch-office-export-render batch-office-export-offscreen" });
+	const callout = wrapper.createDiv({ cls: "callout", attr: { "data-callout": type } });
+	const probe = callout.createSpan({ cls: "batch-office-export-callout-probe" });
 	try {
 		const raw = getComputedStyle(callout).getPropertyValue("--callout-color");
 		return cssColorToHex(raw) ?? (raw.trim() === "" ? undefined : cssColorToHex(getComputedStyle(probe).color));

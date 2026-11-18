@@ -39,7 +39,7 @@ export interface OutputWriter {
 }
 
 export interface MermaidExportDeps {
-	readNote(notePath: string): Promise<string>;
+	readNote: (notePath: string) => Promise<string>;
 	renderer: MermaidRenderer;
 	cache: DiagramCache;
 	writer: OutputWriter;
@@ -130,7 +130,7 @@ export async function exportMermaidNote(
 
 		try {
 			for (let i = 0; i < wanted.length; i++) {
-				const ext = wanted[i]!;
+				const ext = wanted[i];
 				const output = refFor(ext);
 				if (await deps.writer.exists(output)) {
 					const contentHash = (await deps.writer.hashOf(output)) ?? undefined;
@@ -152,7 +152,7 @@ export async function exportMermaidNote(
 		} catch (error) {
 			if (signal.aborted) throw error;
 			warnings.push({ code: "mermaidRenderFailed", detail: `${block.index}: ${error instanceof Error ? error.message : String(error)}` });
-			blockFiles.push({ output: refFor(wanted[0]!), kind: "image", status: "failed", diagramIndex: block.index, reason: "render" });
+			blockFiles.push({ output: refFor(wanted[0]), kind: "image", status: "failed", diagramIndex: block.index, reason: "render" });
 		}
 		files.push(...blockFiles);
 

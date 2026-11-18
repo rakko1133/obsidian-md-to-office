@@ -17,7 +17,7 @@ import type { FileResult, ManifestSnapshot, NoteResult, OutputRef, PlannedAction
 /** Vault の読み取り（Obsidian 側が実装する: フェーズ 3a）。 */
 export type VaultEnvironment = Omit<NoteEnvironment, "readNote" | "isConverted" | "docxLink"> & {
 	/** ノートの frontmatter（metadataCache: A-27） */
-	frontmatter?(path: string): Readonly<Record<string, unknown>> | undefined;
+	frontmatter?: (path: string) => Readonly<Record<string, unknown>> | undefined;
 };
 
 export interface DocxExportDeps extends MermaidExportDeps {

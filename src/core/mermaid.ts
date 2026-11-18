@@ -46,7 +46,7 @@ export function buildRenderSource(source: string, params: Pick<MermaidRenderPara
 		if (end > 0) i = end + 1;
 	}
 	// 利用者のディレクティブと空行
-	while (i < lines.length && (lines[i]!.trim() === "" || /^%%\{.*\}%%$/.test(lines[i]!.trim()))) i++;
+	while (i < lines.length && (lines[i].trim() === "" || /^%%\{.*\}%%$/.test(lines[i].trim()))) i++;
 	return [...lines.slice(0, i), directive, ...lines.slice(i)].join("\n");
 }
 

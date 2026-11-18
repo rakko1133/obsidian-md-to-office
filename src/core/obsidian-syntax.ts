@@ -1,7 +1,7 @@
 // Obsidian 独自の記法を mdast の独自ノードにする変換（G2 の transform・フェーズ 3 のユーザー決定）。
 // 1 つのノートの木に対して、構文解析の直後にかける。リンク先の解決や埋め込みの展開は note-assembly.ts が行う。
 // Obsidian API に依存しない。
-import type { BlockContent, Blockquote, Definition, Html, Paragraph, Parent, PhrasingContent, Root, RootContent, Text } from "mdast";
+import type { BlockContent, Blockquote, Definition, Parent, PhrasingContent, Root, RootContent, Text } from "mdast";
 import { COMMENT_MARK } from "./comments";
 import { walk, walkParents } from "./markdown";
 
@@ -149,17 +149,17 @@ export function resolveReferences(tree: Root): void {
 	});
 	walkParents(tree, (parent) => {
 		const next: RootContent[] = [];
-		for (const child of parent.children as RootContent[]) {
+		for (const child of parent.children) {
 			if (child.type === "definition") continue;
 			if (child.type === "linkReference") {
 				const def = defs.get(child.identifier);
-				next.push(def ? ({ type: "link", url: def.url, title: def.title ?? null, children: child.children, position: child.position } as RootContent) : child);
+				next.push(def ? ({ type: "link", url: def.url, title: def.title ?? null, children: child.children, position: child.position }) : child);
 			} else if (child.type === "imageReference") {
 				const def = defs.get(child.identifier);
-				next.push(def ? ({ type: "image", url: def.url, title: def.title ?? null, alt: child.alt ?? "", position: child.position } as RootContent) : child);
+				next.push(def ? ({ type: "image", url: def.url, title: def.title ?? null, alt: child.alt ?? "", position: child.position }) : child);
 			} else next.push(child);
 		}
-		(parent as Parent).children = next as Parent["children"];
+		parent.children = next;
 	});
 }
 
@@ -173,7 +173,7 @@ const WIKILINK = /(!?)\[\[([^[\]]+?)\]\]/g;
 /** テキストの中の `[[…]]`・`![[…]]` を wikiLink のノードにする。 */
 export function markWikiLinks(tree: Root): void {
 	splitTexts(tree, WIKILINK, (m) => {
-		const inner = m[2]!;
+		const inner = m[2];
 		const bar = inner.indexOf("|");
 		const linkPart = bar === -1 ? inner : inner.slice(0, bar);
 		const alias = bar === -1 ? undefined : inner.slice(bar + 1);
@@ -199,7 +199,7 @@ export function wikiDisplay(link: Pick<WikiLink, "target" | "subpath" | "alias">
 /** Vault の中を指す Markdown のリンク `[x](note.md#見出し)` と画像 `![alt|300](pic.png)` を wikiLink にする。外部 URL の画像はリンクにする（A-20）。 */
 export function convertMarkdownLinks(tree: Root, options: { downloadExternalImages: boolean } = { downloadExternalImages: false }): void {
 	walkParents(tree, (parent) => {
-		parent.children = (parent.children as RootContent[]).map((child) => {
+		parent.children = parent.children.map((child) => {
 			if (child.type === "link" && !hasScheme(child.url)) {
 				const { target, subpath } = splitUrl(child.url);
 				return { type: "wikiLink", target, subpath, embed: false, raw: `[${plainText(child.children)}](${child.url})`, children: child.children, position: child.position } satisfies WikiLink;
@@ -226,7 +226,7 @@ export function convertMarkdownLinks(tree: Root, options: { downloadExternalImag
 				return link;
 			}
 			return child;
-		}) as Parent["children"];
+		});
 	});
 }
 
@@ -247,7 +247,7 @@ const BLOCK_ID_AT_END = /(^|[ \t])\^([A-Za-z0-9-]+)[ \t]*$/;
 export function markBlockIds(tree: Root, sourcePath: string): void {
 	walkParents(tree, (parent) => {
 		const next: RootContent[] = [];
-		for (const child of parent.children as RootContent[]) {
+		for (const child of parent.children) {
 			if (child.type === "paragraph") {
 				const last = child.children[child.children.length - 1];
 				const m = last?.type === "text" ? BLOCK_ID_AT_END.exec(last.value) : null;
@@ -258,14 +258,14 @@ export function markBlockIds(tree: Root, sourcePath: string): void {
 					// 単独の行の `^id` は、直前のブロック（表・引用など）の ID
 					const owner = empty ? next[next.length - 1] : parent.type === "listItem" && next.length === 0 ? parent : child;
 					if (owner) {
-						owner.data = { ...owner.data, blockId: m[2]!, sourcePath };
+						owner.data = { ...owner.data, blockId: m[2], sourcePath };
 						if (empty) continue;
 					}
 				}
 			}
 			next.push(child);
 		}
-		parent.children = next as Parent["children"];
+		parent.children = next;
 	});
 }
 
@@ -307,14 +307,14 @@ export function markCallouts(tree: Root): void {
 				inBody = true;
 			} else title.push(child);
 		}
-		const type = m[1]!.toLowerCase();
+		const type = m[1].toLowerCase();
 		const titleIsEmpty = title.every((c) => c.type === "text" && c.value.trim() === "");
 		const rest = node.children.slice(1);
 		const callout = node as unknown as Callout;
 		callout.type = "callout";
 		callout.calloutType = type;
 		callout.title = titleIsEmpty ? [{ type: "text", value: type.charAt(0).toUpperCase() + type.slice(1) }] : title;
-		callout.children = body.length > 0 ? [{ type: "paragraph", children: body } as Paragraph, ...rest] : rest;
+		callout.children = body.length > 0 ? [{ type: "paragraph", children: body }, ...rest] : rest;
 	});
 }
 
@@ -323,7 +323,7 @@ export function markInlineFootnotes(tree: Root): void {
 	walkParents(tree, (parent) => {
 		const children = parent.children as PhrasingContent[];
 		for (let i = 0; i < children.length; i++) {
-			const node = children[i]!;
+			const node = children[i];
 			if (node.type !== "text") continue;
 			const open = node.value.indexOf("^[");
 			if (open === -1) continue;
@@ -331,7 +331,7 @@ export function markInlineFootnotes(tree: Root): void {
 			let depth = 0;
 			let close: { index: number; offset: number } | null = null;
 			for (let j = i; j < children.length && !close; j++) {
-				const c = children[j]!;
+				const c = children[j];
 				if (c.type !== "text") continue;
 				const from = j === i ? open + 2 : 0;
 				for (let k = from; k < c.value.length; k++) {
@@ -376,27 +376,27 @@ const FORMAT_TAGS = new Set(["u", "sup", "sub", "mark"]);
 export function markHtml(tree: Root): void {
 	walkParents(tree, (parent) => {
 		if (BLOCK_PARENTS.has(parent.type)) {
-			parent.children = (parent.children as RootContent[]).flatMap((child): RootContent[] => {
+			parent.children = parent.children.flatMap<RootContent>((child) => {
 				if (child.type !== "html") return [child];
 				if (/page-break-(after|before)\s*:\s*always/i.test(child.value)) return [{ type: "pageBreak" }];
 				const text = htmlToText(child.value);
 				return text === "" ? [] : [{ type: "paragraph", children: [{ type: "text", value: text }] }];
-			}) as Parent["children"];
+			});
 			return;
 		}
-		parent.children = wrapInlineHtml(parent.children as PhrasingContent[]) as Parent["children"];
+		parent.children = wrapInlineHtml(parent.children as PhrasingContent[]);
 	});
 }
 
 function wrapInlineHtml(children: PhrasingContent[]): PhrasingContent[] {
 	const out: PhrasingContent[] = [];
 	for (let i = 0; i < children.length; i++) {
-		const child = children[i]!;
+		const child = children[i];
 		if (child.type !== "html") {
 			out.push(child);
 			continue;
 		}
-		const value = (child as Html).value.trim();
+		const value = child.value.trim();
 		if (/^<br\s*\/?>$/i.test(value)) {
 			out.push({ type: "break" });
 			continue;
@@ -408,7 +408,7 @@ function wrapInlineHtml(children: PhrasingContent[]): PhrasingContent[] {
 			let depth = 0;
 			let close = -1;
 			for (let j = i + 1; j < children.length; j++) {
-				const c = children[j]!;
+				const c = children[j];
 				if (c.type !== "html") continue;
 				const v = c.value.trim().toLowerCase();
 				if (new RegExp(`^<${tag}(\\s[^>]*)?>$`).test(v)) depth++;
@@ -427,7 +427,7 @@ function wrapInlineHtml(children: PhrasingContent[]): PhrasingContent[] {
 			}
 		}
 		// それ以外のタグは除く（タグの外の文字は別のテキストのノードなので残る）
-		const text = htmlToText((child as Html).value);
+		const text = htmlToText(child.value);
 		if (text !== "") out.push({ type: "text", value: text });
 	}
 	return out;
@@ -454,23 +454,23 @@ function splitTexts(tree: Root, pattern: RegExp, make: (m: RegExpMatchArray) => 
 		if (parent.type === "link" || parent.type === "wikiLink") return;
 		let changed = false;
 		const next: RootContent[] = [];
-		for (const child of parent.children as RootContent[]) {
+		for (const child of parent.children) {
 			if (child.type !== "text") {
 				next.push(child);
 				continue;
 			}
 			let last = 0;
-			const value = (child as Text).value;
+			const value = child.value;
 			for (const m of value.matchAll(new RegExp(pattern.source, "g"))) {
 				changed = true;
-				if (m.index! > last) next.push({ type: "text", value: value.slice(last, m.index) });
-				next.push(make(m) as RootContent);
-				last = m.index! + m[0].length;
+				if (m.index > last) next.push({ type: "text", value: value.slice(last, m.index) });
+				next.push(make(m));
+				last = m.index + m[0].length;
 			}
 			if (last === 0) next.push(child);
 			else if (last < value.length) next.push({ type: "text", value: value.slice(last) });
 		}
-		if (changed) parent.children = next as Parent["children"];
+		if (changed) parent.children = next;
 	});
 }
 
@@ -479,7 +479,7 @@ export function plainText(nodes: readonly PhrasingContent[] | readonly RootConte
 	let out = "";
 	for (const node of nodes) {
 		if ("value" in node && typeof node.value === "string" && node.type !== "html") out += node.value;
-		else if ("children" in node) out += plainText(node.children as PhrasingContent[]);
+		else if ("children" in node) out += plainText(node.children);
 	}
 	return out;
 }

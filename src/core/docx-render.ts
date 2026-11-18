@@ -153,7 +153,7 @@ const CALLOUT_COLORS: Readonly<Record<string, string>> = (() => {
 
 /** コールアウトの色（未知の種類は note の色）。 */
 export function calloutColor(type: string): string {
-	return CALLOUT_COLORS[type] ?? CALLOUT_COLORS.note!;
+	return CALLOUT_COLORS[type] ?? CALLOUT_COLORS.note;
 }
 
 /** 背景の淡い色（白と 10% だけ混ぜる）。 */
@@ -205,7 +205,7 @@ const TOKEN_COLORS: Readonly<Record<string, string>> = {
 /** トークンの色。内側の種類から順に配色を探す。 */
 export function tokenColor(types: readonly string[]): string | undefined {
 	for (let i = types.length - 1; i >= 0; i--) {
-		const color = TOKEN_COLORS[types[i]!];
+		const color = TOKEN_COLORS[types[i]];
 		if (color) return color;
 	}
 	return undefined;
@@ -283,7 +283,7 @@ class NumberingRegistry {
 				levels: Array.from({ length: 9 }, (_, level) => ({
 					level,
 					format: LevelFormat.BULLET,
-					text: BULLETS[level % BULLETS.length]!,
+					text: BULLETS[level % BULLETS.length],
 					alignment: AlignmentType.LEFT,
 					style: { paragraph: indent(level) },
 				})),
@@ -411,7 +411,7 @@ class Renderer {
 		// 見出し 1 の前で改ページ（C-2）。文書の最初と、直前に改ページがあるとき（結合出力の章の境目など）は付けない
 		const pageBreakBefore = this.options.pageBreakBeforeH1 === true && level === 1 && !this.atStart && !this.afterPageBreak;
 		return new Paragraph({
-			heading: HEADINGS[level - 1]!,
+			heading: HEADINGS[level - 1],
 			...(pageBreakBefore ? { pageBreakBefore: true } : {}),
 			...(this.options.headingNumbering ? { numbering: { reference: HEADING_NUMBERING, level: level - 1, instance: 0 } } : {}),
 			children: this.bookmarked(node, this.inlines(node.children, {})),
@@ -440,7 +440,7 @@ class Renderer {
 	private callout(node: Callout, headingShift: number): Table {
 		const color = node.data?.calloutColor ?? calloutColor(node.calloutType);
 		const title = new Paragraph({ spacing: { after: 60 }, children: this.inlines(node.title, { bold: true, color }) });
-		const body = this.blocks(node.children as RootContent[], headingShift);
+		const body = this.blocks(node.children, headingShift);
 		// セルの最後は段落でなければならない
 		if (body.length === 0 || body[body.length - 1] instanceof Table) body.push(new Paragraph({ children: [] }));
 		return new Table({
@@ -478,7 +478,7 @@ class Renderer {
 			} else if (child.type === "paragraph") {
 				let runs = this.inlines(child.children, {});
 				if (first && symbol) runs.unshift(new TextRun(`${symbol} `));
-				runs = this.bookmarked(child, first ? this.bookmarked(item as unknown as RootContent, runs) : runs);
+				runs = this.bookmarked(child, first ? this.bookmarked(item, runs) : runs);
 				const options: IParagraphOptions =
 					first && numbering
 						? { numbering: { reference: numbering.reference, level, instance: numbering.instance }, children: runs }
@@ -568,7 +568,7 @@ class Renderer {
 			const italics = token.types.includes("comment");
 			token.text.split("\n").forEach((part, i) => {
 				if (i > 0) lines.push([]);
-				if (part !== "") lines[lines.length - 1]!.push({ text: part, ...(color ? { color } : {}), ...(italics ? { italics } : {}) });
+				if (part !== "") lines[lines.length - 1].push({ text: part, ...(color ? { color } : {}), ...(italics ? { italics } : {}) });
 			});
 		}
 		const width = String(lines.length).length;
@@ -673,7 +673,7 @@ class Renderer {
 				return [new TextRun({ break: 1 })];
 			case "link":
 				// リンクの解決（note-assembly.ts）の後に残る link は、どれもハイパーリンクにする
-				return [new ExternalHyperlink({ link: node.url, children: this.inlines(node.children, { ...format, link: true }) as TextRun[] })];
+				return [new ExternalHyperlink({ link: node.url, children: this.inlines(node.children, { ...format, link: true }) })];
 			case "internalLink":
 				return [new InternalHyperlink({ anchor: node.anchor, children: this.inlines(node.children, { ...format, link: true }) })];
 			case "wikiLink":
@@ -690,7 +690,7 @@ class Renderer {
 				// Word は 1 つの脚注を 2 か所から参照（w:footnoteReference の重複）すると「ファイルが壊れている」として開かない。
 				// 2 回目以降は脚注参照のスタイルで番号の文字だけを置く。番号は本文での出現順に振るので、Word が表示する番号と一致する
 				if (seen !== undefined) return [new TextRun({ text: String(seen), style: "FootnoteReference", superScript: true })];
-				const id = this.addFootnote(def.children as RootContent[]);
+				const id = this.addFootnote(def.children);
 				this.footnoteIds.set(node.identifier, id);
 				return [new FootnoteReferenceRun(id)];
 			}
@@ -700,7 +700,7 @@ class Renderer {
 				if (this.options.comments?.[node.id] === undefined) return [];
 				return [new CommentRangeStart(node.id), new CommentRangeEnd(node.id), new TextRun({ children: [new CommentReference(node.id)] })];
 			default:
-				return [this.run(this.sourceOf(node as RootContent), { ...format, code: true })];
+				return [this.run(this.sourceOf(node), { ...format, code: true })];
 		}
 	}
 
@@ -831,7 +831,7 @@ export function withoutHeadingStartOverrides(docx: ArrayBuffer): ArrayBuffer {
 	if (!numbering) return docx;
 	const xml = strFromU8(numbering);
 	// 見出しの段落番号の定義は、レベル 2 の番号の書式が「%1.%2」のもの（番号付きリストは「%2.」）
-	const ids = [...xml.matchAll(/<w:abstractNum\b[^>]*w:abstractNumId="(\d+)"[^>]*>([\s\S]*?)<\/w:abstractNum>/g)].filter((m) => m[2]!.includes('<w:lvlText w:val="%1.%2"/>')).map((m) => m[1]!);
+	const ids = [...xml.matchAll(/<w:abstractNum\b[^>]*w:abstractNumId="(\d+)"[^>]*>([\s\S]*?)<\/w:abstractNum>/g)].filter((m) => m[2].includes('<w:lvlText w:val="%1.%2"/>')).map((m) => m[1]);
 	if (ids.length === 0) return docx;
 	const fixed = xml.replace(/<w:num\b[^>]*>([\s\S]*?)<\/w:num>/g, (num: string, body: string) => {
 		const abstractId = /<w:abstractNumId w:val="(\d+)"\/>/.exec(body)?.[1];
@@ -839,7 +839,7 @@ export function withoutHeadingStartOverrides(docx: ArrayBuffer): ArrayBuffer {
 	});
 	files["word/numbering.xml"] = strToU8(fixed);
 	const zipped = zipSync(files);
-	return zipped.buffer.slice(zipped.byteOffset, zipped.byteOffset + zipped.byteLength) as ArrayBuffer;
+	return zipped.buffer.slice(zipped.byteOffset, zipped.byteOffset + zipped.byteLength);
 }
 
 /** 内蔵の段落スタイル: 引用文（A-5）・コード（A-7）・図表番号（R4・C-4b）。 */
@@ -942,7 +942,7 @@ function phrasingText(nodes: readonly PhrasingContent[]): string {
 	let out = "";
 	for (const node of nodes) {
 		if ("value" in node && typeof node.value === "string" && node.type !== "html") out += node.value;
-		else if ("children" in node && Array.isArray(node.children)) out += phrasingText(node.children as PhrasingContent[]);
+		else if ("children" in node && Array.isArray(node.children)) out += phrasingText(node.children);
 	}
 	return out;
 }
@@ -950,7 +950,7 @@ function phrasingText(nodes: readonly PhrasingContent[]): string {
 /** 段落が画像 1 つだけ（前後の空白を除く）なら、その画像（図番号を付ける対象: C-4b）。 */
 function soleImage(nodes: readonly PhrasingContent[]): EmbedImage | undefined {
 	const rest = nodes.filter((n) => !(n.type === "text" && n.value.trim() === ""));
-	return rest.length === 1 && rest[0]!.type === "embedImage" ? rest[0] : undefined;
+	return rest.length === 1 && rest[0].type === "embedImage" ? rest[0] : undefined;
 }
 
 /** 画像のキャプション: 代替テキスト。ファイル名と同じ（`![[a.png]]` の代替テキスト）なら使わない（C-4b）。 */
@@ -964,6 +964,6 @@ function imageCaption(image: EmbedImage): string | undefined {
 /** Mermaid の図の frontmatter の title（R4）。 */
 export function mermaidTitle(source: string): string | undefined {
 	const m = /^\s*---\r?\n([\s\S]*?)\r?\n---/.exec(source);
-	const title = m ? /^title:\s*(.+?)\s*$/m.exec(m[1]!)?.[1] : undefined;
+	const title = m ? /^title:\s*(.+?)\s*$/m.exec(m[1])?.[1] : undefined;
 	return title?.replace(/^["']|["']$/g, "") || undefined;
 }

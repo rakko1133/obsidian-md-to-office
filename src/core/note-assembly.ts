@@ -4,7 +4,7 @@
 // 外部の画像のダウンロード・コールアウトのテーマ色（A-6）を足した。Obsidian API に依存しない。Vault の読み書きは NoteEnvironment に任せる。
 import { latexToMath } from "docx/math";
 import type { InlineMath, Math as MdMath } from "mdast-util-math";
-import type { Code, List, ListItem, Paragraph, Parent, PhrasingContent, Root, RootContent } from "mdast";
+import type { Code, List, Paragraph, Parent, PhrasingContent, Root, RootContent } from "mdast";
 import { COMMENT_MARK, stripComments } from "./comments";
 import { markHighlight, markMermaid, markTaskStates, markUnsupported, parseMarkdown, walk } from "./markdown";
 import {
@@ -33,30 +33,30 @@ export const IMAGE_EXTENSIONS: ReadonlySet<string> = new Set(["png", "jpg", "jpe
 
 /** Vault の読み取りとリンクの解決（Obsidian 側が実装する）。 */
 export interface NoteEnvironment {
-	readNote(path: string): Promise<string>;
+	readNote: (path: string) => Promise<string>;
 	/** リンク先のファイルのパス（Vault からの相対）。解決できなければ null（getFirstLinkpathDest） */
-	resolveLink(linkpath: string, sourcePath: string): string | null;
-	fileExists(path: string): boolean;
+	resolveLink: (linkpath: string, sourcePath: string) => string | null;
+	fileExists: (path: string) => boolean;
 	/** 変換対象か（今回の対象 + マニフェストに .docx として記録されたノート: A-18） */
-	isConverted(path: string): boolean;
+	isConverted: (path: string) => boolean;
 	/** 変換対象のノートの .docx への、変換中のノートの .docx からの相対 URL。作れなければ null */
-	docxLink(targetPath: string): string | null;
+	docxLink: (targetPath: string) => string | null;
 	/** obsidian://open の URI に入れる Vault の名前（A-22） */
 	vaultName: string;
 	/** 画像を読み、Word が扱える形式にする（A-20）。なければ画像は埋め込まない */
-	loadImage?(path: string): Promise<ImageAsset>;
+	loadImage?: (path: string) => Promise<ImageAsset>;
 	/** コードをトークンに分ける（A-7）。言語が分からなければ null */
-	highlight?(code: string, lang: string): CodeToken[] | null;
+	highlight?: (code: string, lang: string) => CodeToken[] | null;
 	/** Obsidian に描画を頼む言語か（コードブロックの処理が登録されているか: A-24・A-26） */
-	renderableLanguage?(lang: string): boolean;
+	renderableLanguage?: (lang: string) => boolean;
 	/** コードブロックを Obsidian に描画させ、結果を mdast にする。描画できなければ null（理由は Error で投げてもよい） */
-	renderBlock?(lang: string, source: string, sourcePath: string, signal?: AbortSignal): Promise<RootContent[] | null>;
+	renderBlock?: (lang: string, source: string, sourcePath: string, signal?: AbortSignal) => Promise<RootContent[] | null>;
 	/** latexToMath で変換できない数式を画像にする（MathJax の SVG + PNG: A-11） */
-	renderMath?(latex: string, display: boolean): Promise<ImageAsset>;
+	renderMath?: (latex: string, display: boolean) => Promise<ImageAsset>;
 	/** 外部の画像を取得する（A-20 のオプション）。なければリンクのまま */
-	fetchImage?(url: string): Promise<ImageAsset>;
+	fetchImage?: (url: string) => Promise<ImageAsset>;
 	/** テーマのコールアウトの色（16 進 6 桁）。読めなければ undefined（A-6 のオプション） */
-	calloutColor?(type: string): string | undefined;
+	calloutColor?: (type: string) => string | undefined;
 }
 
 /** Dataview の言語（Dataview が入っていなければ警告する）。 */
@@ -142,9 +142,9 @@ function splitCommentMarks(tree: Root, offset: number): void {
 		const out: PhrasingContent[] = [];
 		let last = 0;
 		for (const m of child.value.matchAll(new RegExp(COMMENT_MARK.source, "g"))) {
-			if (m.index! > last) out.push({ type: "text", value: child.value.slice(last, m.index) });
+			if (m.index > last) out.push({ type: "text", value: child.value.slice(last, m.index) });
 			out.push({ type: "commentMark", id: offset + Number(m[1]) });
-			last = m.index! + m[0].length;
+			last = m.index + m[0].length;
 		}
 		if (last < child.value.length) out.push({ type: "text", value: child.value.slice(last) });
 		return out;
@@ -180,7 +180,7 @@ export function obsidianOpenUri(vaultName: string, path: string): string {
 export function parseImageAlias(alias: string | undefined): { alt: string; width?: number; height?: number } {
 	if (alias === undefined) return { alt: "" };
 	const parts = alias.split("|");
-	const size = /^\s*(\d+)(?:\s*x\s*(\d+))?\s*$/.exec(parts[parts.length - 1]!);
+	const size = /^\s*(\d+)(?:\s*x\s*(\d+))?\s*$/.exec(parts[parts.length - 1]);
 	if (!size) return { alt: alias.trim() };
 	const out: { alt: string; width?: number; height?: number } = { alt: parts.slice(0, -1).join("|").trim(), width: Number(size[1]) };
 	if (size[2] !== undefined) out.height = Number(size[2]);
@@ -253,7 +253,7 @@ async function expandEmbeds(tree: Root, notePath: string, state: State, stack: s
 async function expandIn(parent: Parent, state: State, stack: string[], depth: number, done: WeakSet<object>): Promise<void> {
 	if (BLOCK_PARENTS.has(parent.type)) {
 		const next: RootContent[] = [];
-		for (const child of parent.children as RootContent[]) {
+		for (const child of parent.children) {
 			if (child.type === "paragraph" && child.children.some((c) => c.type === "wikiLink" && c.embed)) {
 				for (const block of await splitParagraph(child, state, stack, depth)) {
 					done.add(block);
@@ -261,10 +261,10 @@ async function expandIn(parent: Parent, state: State, stack: string[], depth: nu
 				}
 			} else next.push(child);
 		}
-		parent.children = next as Parent["children"];
+		parent.children = next;
 	}
-	for (const child of parent.children as RootContent[]) {
-		if ("children" in child && !done.has(child)) await expandIn(child as Parent, state, stack, depth, done);
+	for (const child of parent.children) {
+		if ("children" in child && !done.has(child)) await expandIn(child, state, stack, depth, done);
 	}
 }
 
@@ -273,7 +273,7 @@ async function splitParagraph(paragraph: Paragraph, state: State, stack: string[
 	const out: RootContent[] = [];
 	let run: PhrasingContent[] = [];
 	const flush = () => {
-		if (run.some((c) => !(c.type === "text" && c.value.trim() === "") && c.type !== "break")) out.push({ type: "paragraph", children: trimRun(run), data: paragraph.data } as Paragraph);
+		if (run.some((c) => !(c.type === "text" && c.value.trim() === "") && c.type !== "break")) out.push({ type: "paragraph", children: trimRun(run), data: paragraph.data });
 		run = [];
 	};
 	for (const child of paragraph.children) {
@@ -339,13 +339,13 @@ export function extractSection(tree: Root, subpath: string): RootContent[] | nul
 		const id = last.slice(1);
 		let found: RootContent[] | null = null;
 		const search = (parent: Parent): void => {
-			for (const child of parent.children as RootContent[]) {
+			for (const child of parent.children) {
 				if (found) return;
 				if (child.data?.blockId === id) {
-					found = child.type === "listItem" ? [{ type: "list", ordered: (parent as List).ordered ?? false, spread: false, children: [child as ListItem] } as List] : [child];
+					found = child.type === "listItem" ? [{ type: "list", ordered: (parent as List).ordered ?? false, spread: false, children: [child] }] : [child];
 					return;
 				}
-				if ("children" in child) search(child as Parent);
+				if ("children" in child) search(child);
 			}
 		};
 		search(tree);
@@ -357,7 +357,7 @@ export function extractSection(tree: Root, subpath: string): RootContent[] | nul
 	const depth = (body[start] as { depth: number }).depth;
 	let end = start + 1;
 	while (end < body.length) {
-		const c = body[end]!;
+		const c = body[end];
 		if (c.type === "heading" && c.depth <= depth) break;
 		end++;
 	}
@@ -372,9 +372,9 @@ async function renderPluginBlocks(tree: Root, rootPath: string, state: State): P
 	const { env } = state;
 	const visit = async (parent: Parent): Promise<void> => {
 		const next: RootContent[] = [];
-		for (const child of parent.children as RootContent[]) {
+		for (const child of parent.children) {
 			if (child.type !== "code" || !child.lang) {
-				if ("children" in child) await visit(child as Parent);
+				if ("children" in child) await visit(child);
 				next.push(child);
 				continue;
 			}
@@ -411,7 +411,7 @@ async function renderPluginBlocks(tree: Root, rootPath: string, state: State): P
 			}
 			next.push(...nodes);
 		}
-		parent.children = next as Parent["children"];
+		parent.children = next;
 	};
 	await visit(tree);
 }
@@ -545,7 +545,7 @@ async function prepareAssets(tree: Root, state: State): Promise<void> {
 
 /** 木のすべてのノードを巡回する（コールアウトのタイトルも含む）。 */
 export function walkAll(tree: Root | RootContent, visit: (node: RootContent) => void): void {
-	walk(tree as Root, (node) => {
+	walk(tree, (node) => {
 		visit(node);
 		if (node.type === "callout") for (const t of node.title) walkAll(t, visit);
 	});
@@ -557,12 +557,12 @@ function mapPhrasing(tree: Root, map: (child: PhrasingContent) => PhrasingConten
 		if (parent.type === "callout") {
 			const callout = parent as unknown as { title: PhrasingContent[] };
 			callout.title = callout.title.flatMap(map);
-			for (const t of callout.title) if ("children" in t) visitParent(t as Parent);
+			for (const t of callout.title) if ("children" in t) visitParent(t);
 		}
 		if (!BLOCK_PARENTS.has(parent.type) && parent.type !== "list" && parent.type !== "table" && parent.type !== "tableRow") {
-			parent.children = (parent.children as PhrasingContent[]).flatMap(map) as Parent["children"];
+			parent.children = (parent.children as PhrasingContent[]).flatMap(map);
 		}
-		for (const child of parent.children as RootContent[]) if ("children" in child) visitParent(child as Parent);
+		for (const child of parent.children) if ("children" in child) visitParent(child);
 	};
 	visitParent(tree);
 }

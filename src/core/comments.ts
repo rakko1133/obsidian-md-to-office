@@ -30,7 +30,7 @@ export function stripComments(markdown: string, keepMarkers = false): StrippedCo
 			const m = /^ {0,3}(`{3,}|~{3,})/.exec(line);
 			if (fence !== null) {
 				// コードブロックの中: 閉じる囲みまでそのまま写す
-				if (m && m[1]![0] === fence[0] && m[1]!.length >= fence.length && line.trim() === m[1]) fence = null;
+				if (m && m[1][0] === fence[0] && m[1].length >= fence.length && line.trim() === m[1]) fence = null;
 				out += line;
 				i += line.length;
 				continue;
@@ -43,7 +43,7 @@ export function stripComments(markdown: string, keepMarkers = false): StrippedCo
 			}
 		}
 
-		const ch = markdown[i]!;
+		const ch = markdown[i];
 		if (ch === "`") {
 			// インラインコード: 同じ長さのバッククォートの並びで閉じる（空行はまたがない）
 			let run = 1;

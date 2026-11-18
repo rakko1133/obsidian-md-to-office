@@ -58,7 +58,7 @@ function u32(n: number): number[] {
 }
 
 function readU32(bytes: Uint8Array, offset: number): number {
-	return ((bytes[offset]! << 24) | (bytes[offset + 1]! << 16) | (bytes[offset + 2]! << 8) | bytes[offset + 3]!) >>> 0;
+	return ((bytes[offset] << 24) | (bytes[offset + 1] << 16) | (bytes[offset + 2] << 8) | bytes[offset + 3]) >>> 0;
 }
 
 let crcTable: Uint32Array | null = null;
@@ -73,6 +73,6 @@ function crc32(bytes: Uint8Array): number {
 		}
 	}
 	let crc = 0xffffffff;
-	for (const b of bytes) crc = crcTable[(crc ^ b) & 0xff]! ^ (crc >>> 8);
+	for (const b of bytes) crc = crcTable[(crc ^ b) & 0xff] ^ (crc >>> 8);
 	return (crc ^ 0xffffffff) >>> 0;
 }

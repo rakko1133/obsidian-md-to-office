@@ -24,14 +24,14 @@ export function cssColorToHex(value: string): string | undefined {
 	const rgb = /^rgba?\(\s*([\d.]+%?)[\s,]+([\d.]+%?)[\s,]+([\d.]+%?)(?:\s*[,/]\s*([\d.]+%?))?\s*\)$/.exec(v);
 	if (rgb) {
 		if (rgb[4] !== undefined && Number.parseFloat(rgb[4]) === 0) return undefined;
-		return hex(rgb.slice(1, 4).map((c) => (c!.endsWith("%") ? (Number.parseFloat(c!) * 255) / 100 : Number.parseFloat(c!))));
+		return hex(rgb.slice(1, 4).map((c) => (c.endsWith("%") ? (Number.parseFloat(c) * 255) / 100 : Number.parseFloat(c))));
 	}
 
 	// color(srgb r g b [/ a])（0〜1）
 	const srgb = /^color\(\s*srgb\s+([\d.]+)\s+([\d.]+)\s+([\d.]+)(?:\s*\/\s*([\d.]+%?))?\s*\)$/.exec(v);
 	if (srgb) {
 		if (srgb[4] !== undefined && Number.parseFloat(srgb[4]) === 0) return undefined;
-		return hex(srgb.slice(1, 4).map((c) => Number.parseFloat(c!) * 255));
+		return hex(srgb.slice(1, 4).map((c) => Number.parseFloat(c) * 255));
 	}
 	return undefined;
 }

@@ -17,7 +17,12 @@ export function valueToText(value: unknown): string {
 	if (value === null || value === undefined) return "";
 	if (Array.isArray(value)) return value.map(valueToText).join(", ");
 	if (typeof value === "object") return JSON.stringify(value);
-	return String(value);
+	return primitiveText(value);
+}
+
+/** 文字列・数値・真偽値・bigint を文字にする。関数などは空にする。 */
+export function primitiveText(value: unknown): string {
+	return typeof value === "string" || typeof value === "number" || typeof value === "boolean" || typeof value === "bigint" ? String(value) : "";
 }
 
 /** 日付として読める値なら Date。 */

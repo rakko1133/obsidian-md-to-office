@@ -34,8 +34,8 @@ async function renderDiagram(mermaid: MermaidApi, source: string, params: Mermai
 		raw = (await mermaid.render(id, source)).svg;
 	} finally {
 		// mermaid が描画用に一時的に作った要素を片付ける（失敗したときに残ることがある）
-		document.getElementById(id)?.remove();
-		document.getElementById(`d${id}`)?.remove();
+		activeDocument.getElementById(id)?.remove();
+		activeDocument.getElementById(`d${id}`)?.remove();
 	}
 	if (signal.aborted) throw signal.reason instanceof Error ? signal.reason : new Error("aborted");
 
@@ -56,15 +56,19 @@ function normalizeSvg(raw: string): { svg: string; plainSvg: string; width: numb
 	const doc = new DOMParser().parseFromString(resolveCssVariables(raw), "image/svg+xml");
 	const el = doc.documentElement;
 	const viewBox = (el.getAttribute("viewBox") ?? "").split(/[\s,]+/).map(Number);
-	let width = viewBox.length === 4 && viewBox[2]! > 0 ? viewBox[2]! : parseFloat(el.getAttribute("width") ?? "") || 800;
-	let height = viewBox.length === 4 && viewBox[3]! > 0 ? viewBox[3]! : parseFloat(el.getAttribute("height") ?? "") || 600;
+	let width = viewBox.length === 4 && viewBox[2] > 0 ? viewBox[2] : parseFloat(el.getAttribute("width") ?? "") || 800;
+	let height = viewBox.length === 4 && viewBox[3] > 0 ? viewBox[3] : parseFloat(el.getAttribute("height") ?? "") || 600;
 	width = Math.ceil(width);
 	height = Math.ceil(height);
 	el.setAttribute("width", String(width));
 	el.setAttribute("height", String(height));
 	el.removeAttribute("style");
 	const plainSvg = new XMLSerializer().serializeToString(el);
-	el.setAttribute("style", "background-color: white;");
+	// 白い背景: viewBox の全体を覆う矩形を最初の子にする（style の background-color を読まないアプリもあるため）
+	const [x, y] = viewBox.length === 4 ? viewBox : [0, 0];
+	const background = doc.createElementNS("http://www.w3.org/2000/svg", "rect");
+	for (const [k, v] of Object.entries({ x: String(x), y: String(y), width: String(width), height: String(height), fill: "#ffffff" })) background.setAttribute(k, v);
+	el.insertBefore(background, el.firstChild);
 	return { svg: new XMLSerializer().serializeToString(el), plainSvg, width, height };
 }
 
@@ -74,7 +78,7 @@ async function svgToPng(svg: string, width: number, height: number, params: Merm
 	img.src = `data:image/svg+xml;charset=utf-8,${encodeURIComponent(svg)}`;
 	await img.decode();
 	const scale = params.dpi / 96;
-	const canvas = document.createElement("canvas");
+	const canvas = createEl("canvas");
 	canvas.width = Math.ceil(width * scale);
 	canvas.height = Math.ceil(height * scale);
 	const ctx = canvas.getContext("2d");
@@ -88,7 +92,7 @@ async function svgToPng(svg: string, width: number, height: number, params: Merm
 		try {
 			canvas.toBlob((b) => (b ? resolve(b) : reject(new Error("toBlob returned null"))), "image/png");
 		} catch (error) {
-			reject(error);
+			reject(error instanceof Error ? error : new Error(String(error)));
 		}
 	});
 	return new Uint8Array(await blob.arrayBuffer());
