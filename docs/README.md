@@ -16,6 +16,7 @@ docs/
 └── process/                   進め方のルール
     ├── development.md         ビルド・テスト・テスト用 Vault での確認の手順
     ├── git-rules.md           ブランチ・コミット・バージョンの規則
+    ├── worklog.md             作業記録（いつ・何をしたか。新しいものが上）
     └── prompts/
         └── component-flows.md フロー図を作るときに使ったプロンプト集
 ```
@@ -27,6 +28,7 @@ docs/
 3. [design/flows/](design/flows/): 各コンポーネントの中の処理。各ファイルの末尾に、まだ決まっていない点（「決める必要があること」）と決定済みの点がある
 4. [process/development.md](process/development.md): ビルド・テストの実行と、テスト用 Vault での確認の手順
 5. [process/git-rules.md](process/git-rules.md): 変更をコミットするときの規則
+6. [process/worklog.md](process/worklog.md): これまでの作業の経緯
 
 ## 文書を足すときの置き場所
 
