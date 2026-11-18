@@ -102,7 +102,7 @@ Obsidian を使う確認は自動化していない（G5）。テスト用 Vault
 - [x] `05-callout-theme`（2026-11-18 Claude が確認）: 設定「コールアウトの色」を「使っているテーマの色」にし、テーマか CSS スニペットで色を変えて変換すると、その色になる
   - スニペットの例（`test-vault/.obsidian/snippets/` に置き、設定 → 外観 → CSS スニペットで有効にする）: `.callout[data-callout="note"] { --callout-color: #d600d6; }`。Obsidian 1.15 の `--callout-color` は色そのもの（`#…`・`rgb(…)`・`color-mix(…)`）を書く。古いテーマの `r, g, b` の形も読める
 - [x] `06-all-in-one`（2026-11-18 Claude が確認）: コールアウトの中と表のセルの中の数式、Dataview の LIST が入る
-- [ ] 確認の後、`npm run build` の本番ビルドに戻して配置する（本番ビルドにはテスト用の処理がない）
+- [x] 確認の後、`npm run build` の本番ビルドに戻して配置する（2026-11-18、0.3.1 のマージ後に配置）（本番ビルドにはテスト用の処理がない）
 
 ## フェーズ 3a の手動確認（完了条件 A）
 
