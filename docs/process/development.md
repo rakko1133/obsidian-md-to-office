@@ -93,15 +93,15 @@ Obsidian を使う確認は自動化していない（G5）。テスト用 Vault
 
 ## フェーズ 3b の手動確認（完了条件 A）
 
-準備: テスト用 Vault に Dataview プラグインを入れて有効にする（コミュニティプラグインから）。`npm run build:dev`（テスト用のコードブロックの処理を登録する開発用ビルド）→ `npm run deploy:test-vault` → Obsidian でプラグインを無効 → 有効にする。サンプルは `test-vault/word3b/`（6 本と、Dataview の対象の `data/`）。フォルダ `word3b` を右クリック →「Word（.docx）に変換」。各 .docx を Word と LibreOffice で開いて確かめる。
+準備: テスト用 Vault に Dataview プラグインを入れて有効にする（コミュニティプラグインから）。dataviewjs を確かめるには、Dataview の設定で「Enable JavaScript Queries」をオンにする（既定はオフ。オフのままなら dataviewjs は描画できなかったとして、コードのまま残って警告が出る）。`npm run build:dev`（テスト用のコードブロックの処理を登録する開発用ビルド）→ `npm run deploy:test-vault` → Obsidian でプラグインを無効 → 有効にする。サンプルは `test-vault/word3b/`（6 本と、Dataview の対象の `data/`）。フォルダ `word3b` を右クリック →「Word（.docx）に変換」。各 .docx を Word と LibreOffice で開いて確かめる。
 
 - [x] `01-math`（2026-11-18 Claude が Obsidian で変換し、Word で確認。LibreOffice は未確認）: インラインとブロックの数式が Word の数式になる（数式をクリックすると Word の数式ツールで編集できる）。分数・根号・総和・積分・極限・行列・場合分け・aligned・記号。`\sideset` と `\genfrac` の式は画像になり、`\undefinedcommand` は LaTeX のまま残る。レポートに警告が 3 件出る。コードの中の `$x$` は数式にならない
-- [ ] `02-dataview`: TABLE が表（「データ A」のリンクをクリックすると `data/データ A.docx` が開く）、LIST がリスト、TASK が ☐ ☑ 付きのリスト、dataviewjs の見出し・段落・表が入る。インラインのクエリは文字のまま。Dataview を無効にして変換すると、コードのまま残って警告が出る
+- [x] `02-dataview`（2026-11-18 Claude が Dataview 0.5.68 を入れて確認）: TABLE が表（「データ A」のリンクをクリックすると `data/データ A.docx` が開く）、LIST がリスト、TASK が ☐ ☑ 付きのリスト、dataviewjs の見出し・段落・表が入る。インラインのクエリは文字のまま。Dataview を無効にして変換すると、コードのまま残って警告が出る
 - [x] `03-plugin-blocks`（2026-11-18 Claude が確認）: テスト用の SVG の図と、少し遅れて描かれる canvas の図（と、その下の段落）が画像として入る。登録のない言語はコードのまま。Mermaid は図になる
 - [x] `04-external-images`（2026-11-18 Claude が確認。Wikipedia のロゴはサムネイルの URL が 400 を返すようになったので、元の SVG の URL に変えた）: 設定「外部の画像をダウンロードする」がオフならリンク、オンなら画像が入る（Wikipedia のロゴは幅 120）。見つからない画像はリンクのまま残って警告が出る
 - [x] `05-callout-theme`（2026-11-18 Claude が確認）: 設定「コールアウトの色」を「使っているテーマの色」にし、テーマか CSS スニペットで色を変えて変換すると、その色になる
   - スニペットの例（`test-vault/.obsidian/snippets/` に置き、設定 → 外観 → CSS スニペットで有効にする）: `.callout[data-callout="note"] { --callout-color: #d600d6; }`。Obsidian 1.15 の `--callout-color` は色そのもの（`#…`・`rgb(…)`・`color-mix(…)`）を書く。古いテーマの `r, g, b` の形も読める
-- [ ] `06-all-in-one`: コールアウトの中と表のセルの中の数式、Dataview の LIST が入る
+- [x] `06-all-in-one`（2026-11-18 Claude が確認）: コールアウトの中と表のセルの中の数式、Dataview の LIST が入る
 - [ ] 確認の後、`npm run build` の本番ビルドに戻して配置する（本番ビルドにはテスト用の処理がない）
 
 ## フェーズ 3a の手動確認（完了条件 A）

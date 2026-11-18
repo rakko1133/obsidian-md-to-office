@@ -8,6 +8,16 @@
 
 ---
 
+## 2026-11-18 フェーズ 3b の Dataview の確認と、取り込みの不具合の修正
+
+- ユーザーの依頼で、Claude がテスト用 Vault に Dataview 0.5.68（blacksmithgu、コミュニティプラグインから）を入れて有効にした
+- 見つかった不具合（A-24）
+  - TABLE の見出しが「File2」になる: Dataview は見出しの後ろに件数（`<span class="dataview small-text">2</span>`）を出す。見出しの文字として取り込んでいた。`th` の中の件数を外してから取り込むようにした
+  - dataviewjs が無効（Dataview の既定）のとき、Dataview のエラー文「Dataview JS queries are disabled…」がそのまま文書に入っていた。描画結果に `.dataview-error` があれば描画できなかったとして、原文を残してその文を警告にするようにした
+- 確認: TABLE（見出し「File」、リンクは `data/データ A.docx` を指す）、LIST、TASK（☐ ☑）、`06-all-in-one` の LIST が入る。JavaScript のクエリが無効なら dataviewjs はコードのまま残って警告、有効にすると見出し・段落（太字）・表が入る。警告は数式の 3 件だけ
+- テスト用 Vault の Dataview の設定は、JavaScript のクエリを有効にしたままにしてある（`.obsidian/` は Git の管理対象外）
+- これで 3b の手動確認は、LibreOffice での確認を除いて終わった。残り: 本番ビルドに戻して配置、マージとタグ `0.3.1`
+
 ## 2026-11-18 フェーズ 3b の手動確認（Dataview 以外）と、テーマのコールアウトの色の不具合の修正
 
 - Claude が Obsidian を画面操作して、3b の確認項目のうち Dataview を使わないものを確かめた
