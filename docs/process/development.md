@@ -59,7 +59,7 @@
 - Word が開けないファイル（壊れている .docx）は「エラー」になり、Word のメッセージが表示される。手で開いたときの「ファイルが壊れている可能性があります」はここで見つかる
 - 一部だけ: `python scripts/preview-export.py --only word3b`。倍率: `--zoom 1.5`。結果は `.preview/summary.json` にもあり、Claude Code に「一覧の結果を見て」と頼むと PNG を読んで確かめられる
 - `.preview/` は Git の管理対象外。基準画像はその PC のフォントで描くので、PC ごとに作る
-- LibreOffice での見え方は対象外（手元に LibreOffice がないため）。LibreOffice で開けるかの確認は、引き続き手動で行う
+- LibreOffice は確認の対象外（未確認だが、開ける見込みという位置づけ。requirements.md の G5 の 2026-11-18 更新）
 
 ## フェーズ 0 の手動確認（完了条件 B1〜B4）
 
@@ -93,9 +93,9 @@ Obsidian を使う確認は自動化していない（G5）。テスト用 Vault
 
 ## フェーズ 3b の手動確認（完了条件 A）
 
-準備: テスト用 Vault に Dataview プラグインを入れて有効にする（コミュニティプラグインから）。dataviewjs を確かめるには、Dataview の設定で「Enable JavaScript Queries」をオンにする（既定はオフ。オフのままなら dataviewjs は描画できなかったとして、コードのまま残って警告が出る）。`npm run build:dev`（テスト用のコードブロックの処理を登録する開発用ビルド）→ `npm run deploy:test-vault` → Obsidian でプラグインを無効 → 有効にする。サンプルは `test-vault/word3b/`（6 本と、Dataview の対象の `data/`）。フォルダ `word3b` を右クリック →「Word（.docx）に変換」。各 .docx を Word と LibreOffice で開いて確かめる。
+準備: テスト用 Vault に Dataview プラグインを入れて有効にする（コミュニティプラグインから）。dataviewjs を確かめるには、Dataview の設定で「Enable JavaScript Queries」をオンにする（既定はオフ。オフのままなら dataviewjs は描画できなかったとして、コードのまま残って警告が出る）。`npm run build:dev`（テスト用のコードブロックの処理を登録する開発用ビルド）→ `npm run deploy:test-vault` → Obsidian でプラグインを無効 → 有効にする。サンプルは `test-vault/word3b/`（6 本と、Dataview の対象の `data/`）。フォルダ `word3b` を右クリック →「Word（.docx）に変換」。各 .docx を Word で開くか、一覧ページ（`npm run preview:export`）で確かめる。
 
-- [x] `01-math`（2026-11-18 Claude が Obsidian で変換し、Word で確認。LibreOffice は未確認）: インラインとブロックの数式が Word の数式になる（数式をクリックすると Word の数式ツールで編集できる）。分数・根号・総和・積分・極限・行列・場合分け・aligned・記号。`\sideset` と `\genfrac` の式は画像になり、`\undefinedcommand` は LaTeX のまま残る。レポートに警告が 3 件出る。コードの中の `$x$` は数式にならない
+- [x] `01-math`（2026-11-18 Claude が Obsidian で変換し、Word で確認）: インラインとブロックの数式が Word の数式になる（数式をクリックすると Word の数式ツールで編集できる）。分数・根号・総和・積分・極限・行列・場合分け・aligned・記号。`\sideset` と `\genfrac` の式は画像になり、`\undefinedcommand` は LaTeX のまま残る。レポートに警告が 3 件出る。コードの中の `$x$` は数式にならない
 - [x] `02-dataview`（2026-11-18 Claude が Dataview 0.5.68 を入れて確認）: TABLE が表（「データ A」のリンクをクリックすると `data/データ A.docx` が開く）、LIST がリスト、TASK が ☐ ☑ 付きのリスト、dataviewjs の見出し・段落・表が入る。インラインのクエリは文字のまま。Dataview を無効にして変換すると、コードのまま残って警告が出る
 - [x] `03-plugin-blocks`（2026-11-18 Claude が確認）: テスト用の SVG の図と、少し遅れて描かれる canvas の図（と、その下の段落）が画像として入る。登録のない言語はコードのまま。Mermaid は図になる
 - [x] `04-external-images`（2026-11-18 Claude が確認。Wikipedia のロゴはサムネイルの URL が 400 を返すようになったので、元の SVG の URL に変えた）: 設定「外部の画像をダウンロードする」がオフならリンク、オンなら画像が入る（Wikipedia のロゴは幅 120）。見つからない画像はリンクのまま残って警告が出る
