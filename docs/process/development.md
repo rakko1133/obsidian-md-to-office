@@ -1,11 +1,12 @@
 # 開発の手順
 
-最終更新: 2026-11-18（フェーズ 1 の確認手順を追加）
+最終更新: 2026-11-18（変換結果を Word で開かずに確かめる一覧ページを追加）
 
 ## 必要なもの
 
 - Node.js 22 以上（確認した版: 22.17.0）と npm
 - Obsidian 1.15.1 以上（`manifest.json` の `minAppVersion`）
+- 変換結果の一覧ページ（`npm run preview:export`）を使うときだけ: Windows、Microsoft Word（.xlsx があれば Excel）、Python 3.12 と `pywin32`・`PyMuPDF`・`Pillow`・`numpy`（`pip install pywin32 pymupdf pillow numpy`）
 
 ## コマンド
 
@@ -18,6 +19,8 @@
 | `npm run typecheck` | 型チェックだけをする |
 | `npm test` | Vitest の単体テストを実行する |
 | `npm run deploy:test-vault` | ビルド結果（`main.js`・`manifest.json`）をテスト用 Vault のプラグインフォルダにコピーする |
+| `npm run preview:export` | `test-vault/_export` の .docx / .xlsx を PDF → PNG にし、基準画像と比べた一覧ページ `.preview/index.html` を作る |
+| `npm run preview:approve` | 今回の PNG を基準画像（`.preview/baseline/`）として登録する |
 
 ## ソースの構成
 
@@ -41,6 +44,22 @@
 
 - `test-vault/.obsidian/` の中は、`community-plugins.json`（プラグインを有効にする設定）以外は Git の管理対象外にしている
 - このリポジトリのルートも Obsidian の Vault として開いている場合、`test-vault/` のノートもルートの Vault に表示される。気になるときは、ルートの Vault の 設定 → ファイルとリンク → 除外するファイル に `test-vault/` を足す
+
+## 変換結果を Word で開かずに確かめる（一覧ページ）
+
+各 .docx を Word で 1 つずつ開く代わりに、`scripts/preview-export.py` でまとめて画像にして確かめる。
+
+1. Obsidian でサンプルのフォルダを変換する（出力は `test-vault/_export/`）
+2. `npm run preview:export`（63 ファイルで約 20 秒。PDF が .docx より新しければ PDF 化を省く）
+3. `.preview/index.html` をブラウザで開く（`python scripts/preview-export.py --open` なら自動で開く）
+4. 見た目に問題がなければ `npm run preview:approve` で基準画像にする
+
+- 仕組み: Word / Excel を COM オートメーションで画面に出さずに起動し（`DispatchEx` で別のインスタンスを作るので、開いている Word には触らない）、`ExportAsFixedFormat` で PDF にする。Word 自身のレイアウトエンジンで描くので、Word で開いたときとほぼ同じ見た目になる。PDF は PyMuPDF で 1 ページずつ PNG にする
+- 比較: 基準画像とピクセル単位で比べる（1 チャンネルあたりの差が 16 以下はアンチエイリアスの揺れとして無視する）。一覧ページの既定では「変化あり」「基準なし」「エラー」だけを表示し、変わったページは「基準・今回・差分（違う箇所を赤）」を並べる
+- Word が開けないファイル（壊れている .docx）は「エラー」になり、Word のメッセージが表示される。手で開いたときの「ファイルが壊れている可能性があります」はここで見つかる
+- 一部だけ: `python scripts/preview-export.py --only word3b`。倍率: `--zoom 1.5`。結果は `.preview/summary.json` にもあり、Claude Code に「一覧の結果を見て」と頼むと PNG を読んで確かめられる
+- `.preview/` は Git の管理対象外。基準画像はその PC のフォントで描くので、PC ごとに作る
+- LibreOffice での見え方は対象外（手元に LibreOffice がないため）。LibreOffice で開けるかの確認は、引き続き手動で行う
 
 ## フェーズ 0 の手動確認（完了条件 B1〜B4）
 

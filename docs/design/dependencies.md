@@ -45,6 +45,15 @@ G1 の条件: 配布物に含めるライブラリは、再配布できるライ
 | `tslib` | 2.9.1 | 0BSD | TypeScript の補助関数 |
 | `jszip` | 3.10.2 | (MIT OR GPL-3.0-or-later) | テストで .docx / .xlsx を展開して中身を確かめる |
 
+変換結果の一覧ページ（`scripts/preview-export.py`）が使う Python のパッケージ。npm の依存ではなく、使う人が各自で入れる。配布物にもリポジトリにも含めない。
+
+| パッケージ | 確認した版 | ライセンス | 用途 |
+|---|---|---|---|
+| `pywin32` | 306 | PSF | Word / Excel の COM オートメーション（PDF 化） |
+| `PyMuPDF` | 1.27.2.3 | AGPL-3.0 または商用 | PDF → PNG。手元で動かす開発用の道具としてだけ使い、配布しない |
+| `Pillow` | 12.3.0 | MIT-CMU | PNG の読み書き |
+| `numpy` | 2.4.2 | BSD-3-Clause ほか | ピクセル単位の比較 |
+
 ## 既知の脆弱性の警告（npm audit・2026-11-18）
 
 - `exceljs` が依存する `uuid`（< 11.1.1）に moderate の警告がある（GHSA-w5hq-g745-h8pq: v3/v5/v6 で `buf` 引数を渡したときの境界チェック漏れ）。`npm audit fix --force` は `exceljs` を 3.4.0 に下げる破壊的変更になるので適用しない。exceljs が使うのは v4 の UUID 生成で、該当する呼び出し方ではない（要確認）
