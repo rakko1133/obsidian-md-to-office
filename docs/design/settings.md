@@ -28,7 +28,7 @@
 
 | キー | 値 | 既定値 | 要件 | 実装 |
 |---|---|---|---|---|
-| `includeGlobs` | glob パターンの配列 | 空（すべて含める） | R2 | 1 |
+| `includeGlobs` | glob パターンの配列（`*`・`**`・`?`・`[…]`・`{a,b}`。extglob の `+(a|b)` などは 1.0.2 から使えない） | 空（すべて含める） | R2 | 1 |
 | `excludeGlobs` | glob パターンの配列 | `["**/*.excalidraw.md"]` | R2 | 1 |
 
 frontmatter の `export: false` による除外は常に有効で、設定は持たない（R2）。
