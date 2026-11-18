@@ -29,7 +29,7 @@ export async function runSequential(options: RunOptions): Promise<RunOutcome> {
 
 	for (let i = 0; i < notes.length; i++) {
 		if (isCancelled()) return { results, end: "cancelled" };
-		const notePath = notes[i]!;
+		const notePath = notes[i];
 		onProgress?.(i, notes.length, notePath);
 		await yieldNow();
 

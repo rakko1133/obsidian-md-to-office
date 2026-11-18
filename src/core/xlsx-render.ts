@@ -218,7 +218,7 @@ function cellContent(nodes: readonly PhrasingContent[]): CellContent {
 				case "commentMark":
 					break;
 				default:
-					if ("children" in node && Array.isArray(node.children)) walk(node.children as PhrasingContent[], format);
+					if ("children" in node && Array.isArray(node.children)) walk(node.children, format);
 					else if ("value" in node && typeof node.value === "string") push(node.value, format);
 			}
 		}
@@ -347,7 +347,7 @@ export class XlsxBook {
 			sheet.getCell(row, 2).value = entry.notePath;
 			sheet.getCell(row, 3).value = entry.heading;
 			sheet.getCell(row, 4).value = entry.tables;
-			[entry.sheet, entry.notePath, entry.heading, String(entry.tables)].forEach((t, i) => (widths[i] = Math.max(widths[i]!, displayWidth(t))));
+			[entry.sheet, entry.notePath, entry.heading, String(entry.tables)].forEach((t, i) => (widths[i] = Math.max(widths[i], displayWidth(t))));
 		});
 		widths.forEach((w, i) => (sheet.getColumn(i + 1).width = columnWidth(w).width));
 		sheet.views = [{ state: "frozen", ySplit: 1 }];
@@ -383,7 +383,7 @@ export class XlsxBook {
 				names.map((_, c) => {
 					const content = r[c] ?? { text: "", runs: [] };
 					measure(c, content.text);
-					return cellValue(content, types[c]!, (detail) => warnings.push({ code: "cellTruncated", detail: `${notePath}: ${sheet.name}!${columnLetter(c)}${headerRow + 1 + ri}${detail}` }));
+					return cellValue(content, types[c], (detail) => warnings.push({ code: "cellTruncated", detail: `${notePath}: ${sheet.name}!${columnLetter(c)}${headerRow + 1 + ri}${detail}` }));
 				}),
 			);
 			const rows = values.length > 0 ? values : [names.map(() => null)];
@@ -421,7 +421,7 @@ export class XlsxBook {
 					if (!content) return;
 					const address = `${columnLetter(c)}${headerRow + 1 + ri}`;
 					const cell = sheet.getCell(address);
-					const type = types[c]!;
+					const type = types[c];
 					if (type.numFmt && typeof cell.value !== "string" && cell.value !== null) cell.numFmt = type.numFmt;
 					if (content.text.includes("\n")) wrapColumns.add(c);
 					this.applyLink(sheet, address, content);
@@ -547,8 +547,8 @@ export class XlsxBook {
 						cells.forEach((content, c) => {
 							const address = `${columnLetter(BODY - 1 + c)}${r}`;
 							const cell = sheet.getCell(address);
-							cell.value = cellValue(content, types[c]!, truncated(address));
-							if (types[c]!.numFmt && typeof cell.value !== "string" && cell.value !== null) cell.numFmt = types[c]!.numFmt!;
+							cell.value = cellValue(content, types[c], truncated(address));
+							if (types[c].numFmt && typeof cell.value !== "string" && cell.value !== null) cell.numFmt = types[c].numFmt!;
 							const horizontal = table.align[c] ?? undefined;
 							if (horizontal) cell.alignment = { horizontal };
 							cell.border = thinBorder();

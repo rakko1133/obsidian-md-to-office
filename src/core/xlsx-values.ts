@@ -74,7 +74,7 @@ function parseDate(text: string): { date: Date; hasTime: boolean } | null {
 	if (mo! < 1 || mo! > 12 || d! < 1 || d! > 31) return null;
 	if (h !== undefined && (h > 23 || mi! > 59)) return null;
 	// 書かれた日時をそのまま Excel の日時にする（exceljs は Date を UTC として書くので、UTC で作る）
-	const date = new Date(Date.UTC(y!, mo! - 1, d!, h ?? 0, mi ?? 0));
+	const date = new Date(Date.UTC(y!, mo! - 1, d, h ?? 0, mi ?? 0));
 	if (date.getUTCMonth() !== mo! - 1) return null; // 2 月 30 日など
 	return { date, hasTime: h !== undefined };
 }
@@ -91,27 +91,27 @@ export function detectColumnType(texts: readonly string[]): ColumnType {
 
 	const numbers = values.map(parseNumber);
 	if (numbers.every((n) => n !== null)) {
-		const decimals = Math.max(...numbers.map((n) => n!.decimals));
-		if (numbers.some((n) => n!.grouped)) return { kind: "number", numFmt: `#,##0${decimalsFormat(decimals)}` };
+		const decimals = Math.max(...numbers.map((n) => n.decimals));
+		if (numbers.some((n) => n.grouped)) return { kind: "number", numFmt: `#,##0${decimalsFormat(decimals)}` };
 		return { kind: "number" };
 	}
 
 	const percents = values.map((v) => PERCENT.exec(v));
 	if (percents.every((m) => m !== null)) {
-		const decimals = Math.max(...percents.map((m) => m![2]?.length ?? 0));
+		const decimals = Math.max(...percents.map((m) => m[2]?.length ?? 0));
 		return { kind: "percent", numFmt: `0${decimalsFormat(decimals)}%` };
 	}
 
 	const currencies = values.map(parseCurrency);
-	if (currencies.every((c) => c !== null) && new Set(currencies.map((c) => c!.currency)).size === 1) {
-		const decimals = Math.max(...currencies.map((c) => c!.number.decimals));
+	if (currencies.every((c) => c !== null) && new Set(currencies.map((c) => c.currency)).size === 1) {
+		const decimals = Math.max(...currencies.map((c) => c.number.decimals));
 		const body = `#,##0${decimalsFormat(decimals)}`;
-		const currency = currencies[0]!.currency;
+		const currency = currencies[0].currency;
 		return { kind: "currency", numFmt: currency === "yen" ? `"¥"${body}` : currency === "dollar" ? `"$"${body}` : `${body}"円"` };
 	}
 
 	const dates = values.map(parseDate);
-	if (dates.every((d) => d !== null)) return { kind: "date", numFmt: dates.some((d) => d!.hasTime) ? "yyyy-mm-dd hh:mm" : "yyyy-mm-dd" };
+	if (dates.every((d) => d !== null)) return { kind: "date", numFmt: dates.some((d) => d.hasTime) ? "yyyy-mm-dd hh:mm" : "yyyy-mm-dd" };
 
 	if (values.every((v) => BOOLEAN.test(v))) return { kind: "boolean" };
 	return { kind: "string" };

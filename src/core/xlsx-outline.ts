@@ -57,7 +57,7 @@ export function outlineRows(tree: Root): OutlineRow[] {
 				break;
 			case "callout":
 				if (node.title.length > 0) rows.push({ kind: "text", content: withoutImages(node.title), level, bold: true });
-				blocks(node.children as RootContent[]);
+				blocks(node.children);
 				break;
 			default:
 				// 水平線・HTML・改ページ・脚注の定義などは出さない
@@ -83,7 +83,7 @@ export function outlineRows(tree: Root): OutlineRow[] {
 
 	const child = (node: BlockContent | RootContent, depth: number): void => {
 		if (node.type === "list") list(node, depth + 1);
-		else block(node as RootContent);
+		else block(node);
 	};
 
 	blocks(tree.children);
@@ -95,7 +95,7 @@ function withoutImages(nodes: readonly PhrasingContent[]): PhrasingContent[] {
 	return nodes.map((node) => {
 		if (node.type === "embedImage") return { type: "text", value: node.alt || node.path };
 		if (node.type === "image") return { type: "text", value: node.alt ?? "" };
-		if ("children" in node && Array.isArray(node.children)) return { ...node, children: withoutImages(node.children as PhrasingContent[]) } as PhrasingContent;
+		if ("children" in node && Array.isArray(node.children)) return { ...node, children: withoutImages(node.children) };
 		return node;
 	});
 }

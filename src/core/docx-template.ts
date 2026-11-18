@@ -48,8 +48,8 @@ const BUILTIN_IDS: Readonly<Record<string, string>> = {
 export function normalizeStyleIds(stylesXml: string): string {
 	const rename = new Map<string, string>();
 	for (const m of stylesXml.matchAll(/<w:style\b[^>]*\bw:styleId="([^"]+)"[^>]*>[\s\S]*?<w:name w:val="([^"]+)"/g)) {
-		const id = m[1]!;
-		const target = BUILTIN_IDS[m[2]!.toLowerCase()];
+		const id = m[1];
+		const target = BUILTIN_IDS[m[2].toLowerCase()];
 		if (target && target !== id) rename.set(id, target);
 	}
 	if (rename.size === 0) return stylesXml;
@@ -63,5 +63,5 @@ export function normalizeStyleIds(stylesXml: string): string {
 
 /** styles.xml に定義されているスタイルの ID。 */
 export function styleIds(stylesXml: string): Set<string> {
-	return new Set([...stylesXml.matchAll(/w:styleId="([^"]+)"/g)].map((m) => m[1]!));
+	return new Set([...stylesXml.matchAll(/w:styleId="([^"]+)"/g)].map((m) => m[1]));
 }

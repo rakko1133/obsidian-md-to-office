@@ -1,7 +1,7 @@
 // 結合出力（C-8・フェーズ 5a）。Obsidian API に依存しない。
 // 1 フォルダ = 1 つの .docx。ノートごとに組み立て（prepareDocxNote）、全ノートの処理の後に章として並べて 1 つの文書の木にまとめ、
 // renderDocx に 1 回渡す。まとめるときに、脚注・ブックマーク・コメント・Mermaid の図の連番を章ごとに付け直す。
-import type { Link, PhrasingContent, Root, RootContent } from "mdast";
+import type { PhrasingContent, Root, RootContent } from "mdast";
 import { pageDecorations, prepareDocxNote, styleOptions, writeWithConflictPolicy, type DocxExportDeps, type PlannedOutput } from "./docx-export";
 import { renderDocx, type DiagramAsset } from "./docx-render";
 import { mapFrontmatter, valueToText } from "./frontmatter";
@@ -77,7 +77,7 @@ type AnyNode = Root | RootContent;
 
 /** 子を持つノードの子の配列。 */
 function childrenOf(node: AnyNode): AnyNode[] | undefined {
-	return "children" in node && Array.isArray(node.children) ? (node.children as AnyNode[]) : undefined;
+	return "children" in node && Array.isArray(node.children) ? (node.children) : undefined;
 }
 
 /**
@@ -145,10 +145,10 @@ export function combineChapters(chapters: readonly Chapter[]): { tree: Root; com
 	// 章へのリンクを付け替える
 	const relink = (nodes: AnyNode[]): void => {
 		for (let i = 0; i < nodes.length; i++) {
-			const node = nodes[i]!;
+			const node = nodes[i];
 			if (node.type === "link" && node.url.startsWith(CHAPTER_LINK_SCHEME)) {
 				const anchor = chapterAnchor.get(node.url.slice(CHAPTER_LINK_SCHEME.length));
-				const link = node as Link;
+				const link = node;
 				const replacement: PhrasingContent[] = anchor !== undefined ? [{ type: "internalLink", anchor, children: link.children }] : link.children;
 				nodes.splice(i, 1, ...(replacement as AnyNode[]));
 				i += replacement.length - 1;

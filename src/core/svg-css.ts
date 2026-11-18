@@ -8,8 +8,8 @@ const MAX_DEPTH = 10;
 export function collectCssVariables(svg: string): Map<string, string> {
 	const defs = new Map<string, string>();
 	for (const m of svg.matchAll(/(?:^|[;{\s"'])--([A-Za-z0-9_-]+)\s*:\s*/g)) {
-		const name = m[1]!;
-		const start = m.index! + m[0].length;
+		const name = m[1];
+		const start = m.index + m[0].length;
 		const value = readValue(svg, start);
 		if (!defs.has(name)) defs.set(name, value.trim());
 	}
@@ -20,7 +20,7 @@ export function collectCssVariables(svg: string): Map<string, string> {
 function readValue(text: string, start: number): string {
 	let depth = 0;
 	for (let i = start; i < text.length; i++) {
-		const ch = text[i]!;
+		const ch = text[i];
 		if (ch === "(") depth++;
 		else if (ch === ")") depth = Math.max(0, depth - 1);
 		else if (depth === 0 && (ch === ";" || ch === "}" || ch === '"' || ch === "'")) return text.slice(start, i);
