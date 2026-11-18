@@ -1,10 +1,12 @@
-// 出力マニフェスト（export-manifest.json）の形式と読み書きの関数（10: 実行結果の記録・R3・D4）。
+// 出力マニフェスト（export-record.json）の形式と読み書きの関数（10: 実行結果の記録・R3・D4）。
 // ファイルの読み書きそのものは呼び出し側が行う。ここは文字列との変換と、結果の反映だけを持つ。
 import { refKey } from "./output-plan";
 import type { ManifestEntry, ManifestSnapshot, NoteResult } from "./types";
 
 export const MANIFEST_VERSION = 1;
-export const MANIFEST_FILE_NAME = "export-manifest.json";
+// 1.0.1 までは export-manifest.json。コミュニティプラグインの自動レビューが「manifest.json を書き換える」と
+// 誤って判定するため 1.0.2 で改名した（公開前で利用者がいないため、古いファイルの引き継ぎはしない）
+export const MANIFEST_FILE_NAME = "export-record.json";
 
 export interface ParsedManifest {
 	snapshot: ManifestSnapshot;
