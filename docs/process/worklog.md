@@ -8,6 +8,13 @@
 
 ---
 
+## 2026-11-18 数式の画像化を同梱の MathJax に切り替え
+
+- ユーザー決定: Obsidian 同梱の MathJax で数式を画像にできない問題は、MathJax を同梱して画像にする（ライセンスを確認した。Apache-2.0 で無料、再配布できる）
+- 作ったもの: `src/core/math-svg.ts`（`mathjax-full` 3.2.2 の TeX 入力と SVG 出力。DOM を使わない liteAdaptor。`fontCache: none` で字形を SVG に直接書く。`currentColor` は黒に置き換える。読めない式は例外）。`plugin-render.ts` の `renderMath` は、これを画像（PNG の代替付き）にするだけにした。TeX の拡張は `noerrors`・`noundefined` を除いた全部
+- 確認: 単体テスト 154 件（`math-svg.test.ts` の 6 件を追加）。`\sideset`・`\genfrac`・`\ce`・`\bbox` が SVG になり、`\undefinedcommand` と閉じていない式は例外になる。`word3b/01-math.md` を同梱の MathJax で変換した .docx を一覧ページで Word に描かせ、画像の式が正しく出ることを確かめた。本番ビルドの main.js は 3.18 MB（+1.74 MB）。脆弱性の警告は増えていない
+- 残り: Obsidian の中での確認（PNG の代替画像は Obsidian の canvas で作るため）。公開時のライセンス文のまとめ（依存一覧に記載）
+
 ## 2026-11-18 一覧ページで 3b と Mermaid の変換結果を確認
 
 - 対象: 18:44 に変換した `test-vault/_export`（Mermaid の黒塗りの修正 `2d904cb` を含むビルド）。一覧ページの PNG を Claude が見た
@@ -15,7 +22,7 @@
 - Dataview のブロックはコードのまま: テスト用 Vault に Dataview を入れていないため（想定どおり）。Dataview を入れた確認は残っている
 - 見つかった不具合: `\sideset` と `\genfrac` の式が画像にならず、LaTeX のまま残る
   - 原因: Obsidian 1.15.1 に同梱の MathJax は CHTML 出力だけのビルドで、`MathJax.tex2svg` がない（`obsidian-1.15.1.asar` の中で `tex2svg` は 0 件、`tex2chtml` は 2 件）。`plugin-render.ts` の `renderMath` は常に「MathJax is not available」で失敗し、`mathFailed` に回る。単体テストは偽の DOM なので見つけられなかった
-  - 対応は未定（ユーザーに確認する）
+  - 対応: 同梱の MathJax に切り替えた（上の項目）
 - 脚注の修正を入れた開発用ビルドを配置した。`_export` はまだ作り直していない
 
 ## 2026-11-18 変換結果を Word で開かずに確かめる一覧ページ
