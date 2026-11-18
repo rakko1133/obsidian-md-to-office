@@ -1,12 +1,15 @@
-// 「Mermaid 画像として保存」の全体の流れ（R1 の単独保存: 01→02→03→06→09→10）。
+// 書き出しの全体の流れ（01→02→03→（04・06・07）→09→10）。モードごとに、ドライランとノート 1 件の処理だけを差し替える。
+// - mermaid: Mermaid 画像として保存（R1 の単独保存・フェーズ 1）
+// - docx: Word に変換（フェーズ 2）
 import { FileSystemAdapter, Notice, TFile, type App } from "obsidian";
 import * as nodePath from "path";
+import { exportDocxNote, planDocxNote, type PlannedOutput } from "../core/docx-export";
 import { applyResults } from "../core/manifest";
 import { exportMermaidNote, planMermaidNote, type MermaidExportDeps } from "../core/mermaid-export";
 import { runSequential } from "../core/run";
 import type { PluginSettings } from "../core/settings";
 import { filterTargets } from "../core/targets";
-import type { Warning } from "../core/types";
+import type { ManifestSnapshot, NoteResult, OutputRef, Warning } from "../core/types";
 import { t } from "../i18n";
 import { collectCandidates, type TargetSource } from "./collect";
 import { confirmTargets } from "./confirm-modal";
@@ -17,6 +20,8 @@ import { createMermaidRenderer } from "./mermaid-renderer";
 import { ProgressNotice } from "./progress";
 import { showReport } from "./report-modal";
 
+export type ExportMode = "mermaid" | "docx";
+
 export interface ExportHost {
 	app: App;
 	settings: PluginSettings;
@@ -24,14 +29,58 @@ export interface ExportHost {
 	pluginDir: string;
 }
 
+interface ModeContext {
+	settings: PluginSettings;
+	deps: MermaidExportDeps;
+	app: App;
+}
+
+/** モードごとの違い: 確認画面の題名、ドライラン、ノート 1 件の処理。 */
+interface ModeDefinition {
+	title: () => string;
+	plan(ctx: ModeContext, notePath: string): Promise<PlannedOutput[]>;
+	process(ctx: ModeContext, notePath: string, signal: AbortSignal, manifest: ManifestSnapshot): Promise<NoteResult>;
+}
+
+const MODES: Record<ExportMode, ModeDefinition> = {
+	mermaid: {
+		title: () => t("confirm.title"),
+		plan: async ({ settings, deps }, path) => planMermaidNote(path, await deps.readNote(path), settings, deps.renderer.version, (ref) => deps.writer.exists(ref)),
+		process: ({ settings, deps }, path, signal, manifest) => exportMermaidNote(path, signal, settings, manifest, deps),
+	},
+	docx: {
+		title: () => t("confirm.titleWord"),
+		plan: async ({ settings, deps }, path) => {
+			const exists = (ref: OutputRef) => deps.writer.exists(ref);
+			const plans = await planDocxNote(path, settings, exists);
+			if (settings.saveImageFiles) plans.push(...(await planMermaidNote(path, await deps.readNote(path), settings, deps.renderer.version, exists)));
+			return plans;
+		},
+		process: ({ settings, deps, app }, path, signal, manifest) =>
+			exportDocxNote(path, signal, settings, manifest, { ...deps, strictLineBreaks: readStrictLineBreaks(app) }),
+	},
+};
+
+/** Obsidian の「厳密な改行」の設定（A-2）。非公開 API なので、読めなければ undefined。 */
+function readStrictLineBreaks(app: App): boolean | undefined {
+	const vault = app.vault as unknown as { getConfig?: (key: string) => unknown };
+	try {
+		const value = vault.getConfig?.("strictLineBreaks");
+		return typeof value === "boolean" ? value : undefined;
+	} catch {
+		return undefined;
+	}
+}
+
 let running = false;
 
-export async function saveMermaidImages(host: ExportHost, source: TargetSource): Promise<void> {
+export async function runExport(host: ExportHost, mode: ExportMode, source: TargetSource): Promise<void> {
 	if (running) {
 		new Notice(t("notice.alreadyRunning"));
 		return;
 	}
 	const { app } = host;
+	const definition = MODES[mode];
 	if (source.kind === "active" && !(app.workspace.getActiveFile()?.extension === "md")) {
 		new Notice(t("notice.noActiveNote"));
 		return;
@@ -74,6 +123,7 @@ export async function saveMermaidImages(host: ExportHost, source: TargetSource):
 			if (!(file instanceof TFile)) throw new Error(`not found: ${path}`);
 			return app.vault.cachedRead(file);
 		};
+		const ctx: ModeContext = { settings, app, deps: { readNote, renderer, cache, writer } };
 
 		// 02: 実行前の確認画面（ドライラン）
 		const outputLabel =
@@ -83,17 +133,17 @@ export async function saveMermaidImages(host: ExportHost, source: TargetSource):
 					? settings.externalOutputRoot
 					: `${settings.outputRoot}/`;
 		const selected = await confirmTargets(app, {
+			title: definition.title(),
 			targets,
 			excludedCount: excluded.length,
 			outputLabel,
-			plan: async (path) => planMermaidNote(path, await readNote(path), settings, renderer.version, (ref) => writer.exists(ref)),
+			plan: (path) => definition.plan(ctx, path),
 		});
 		if (!selected || selected.length === 0) return;
 
 		// 10: マニフェストは開始時に 1 回だけ読む（D4）
 		const { snapshot, warnings: loadWarnings } = await store.load();
 		const runWarnings: Warning[] = [...loadWarnings];
-		const deps: MermaidExportDeps = { readNote, renderer, cache, writer };
 
 		// 03: 1 件ずつ順に変換
 		const progress = new ProgressNotice();
@@ -101,7 +151,7 @@ export async function saveMermaidImages(host: ExportHost, source: TargetSource):
 		try {
 			outcome = await runSequential({
 				notes: selected,
-				processNote: (path, signal) => exportMermaidNote(path, signal, settings, snapshot, deps),
+				processNote: (path, signal) => definition.process(ctx, path, signal, snapshot),
 				timeoutMs: settings.timeoutSeconds * 1000,
 				onError: settings.onError,
 				isCancelled: progress.isCancelled,

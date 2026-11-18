@@ -28,6 +28,26 @@ export interface PluginSettings {
 	pngTransparentBackground: boolean;
 	/** Mermaid のフォント（R4） */
 	mermaidFontFamily: string;
+	/** 変換時に画像ファイルも保存する（R8） */
+	saveImageFiles: boolean;
+	/** 文書プロパティの作成者名（C-8・D-5） */
+	authorName: string;
+	/** 見出しを 1 段下げ、ファイル名を「表題」にする（A-1） */
+	fileNameAsTitle: boolean;
+	/** Obsidian の「厳密な改行」の設定を読めなかったときに使う値（A-2） */
+	strictLineBreaksFallback: boolean;
+	/** 用紙サイズ（C-2） */
+	paperSize: "A4" | "B5" | "Letter";
+	/** 印刷の向き（C-2） */
+	orientation: "portrait" | "landscape";
+	/** 余白（mm）（C-2） */
+	marginsMm: { top: number; bottom: number; left: number; right: number };
+	/** 本文のフォント（C-3） */
+	bodyFontEastAsia: string;
+	bodyFontLatin: string;
+	/** 見出しのフォント（C-3） */
+	headingFontEastAsia: string;
+	headingFontLatin: string;
 }
 
 export const DEFAULT_SETTINGS: Readonly<PluginSettings> = {
@@ -44,6 +64,17 @@ export const DEFAULT_SETTINGS: Readonly<PluginSettings> = {
 	pngDpi: 192,
 	pngTransparentBackground: false,
 	mermaidFontFamily: '"Yu Gothic", "YuGothic", "Hiragino Sans", "Meiryo", sans-serif',
+	saveImageFiles: false,
+	authorName: "",
+	fileNameAsTitle: false,
+	strictLineBreaksFallback: false,
+	paperSize: "A4",
+	orientation: "portrait",
+	marginsMm: { top: 25, bottom: 25, left: 25, right: 25 },
+	bodyFontEastAsia: "游明朝",
+	bodyFontLatin: "Century",
+	headingFontEastAsia: "游ゴシック",
+	headingFontLatin: "Arial",
 };
 
 /**
@@ -70,6 +101,17 @@ export function normalizeSettings(raw: unknown): PluginSettings {
 			typeof data.mermaidFontFamily === "string" && data.mermaidFontFamily.trim() !== ""
 				? data.mermaidFontFamily.trim()
 				: d.mermaidFontFamily,
+		saveImageFiles: bool(data.saveImageFiles, d.saveImageFiles),
+		authorName: typeof data.authorName === "string" ? data.authorName.trim() : d.authorName,
+		fileNameAsTitle: bool(data.fileNameAsTitle, d.fileNameAsTitle),
+		strictLineBreaksFallback: bool(data.strictLineBreaksFallback, d.strictLineBreaksFallback),
+		paperSize: oneOf(data.paperSize, ["A4", "B5", "Letter"], d.paperSize),
+		orientation: oneOf(data.orientation, ["portrait", "landscape"], d.orientation),
+		marginsMm: margins(data.marginsMm, d.marginsMm),
+		bodyFontEastAsia: text(data.bodyFontEastAsia, d.bodyFontEastAsia),
+		bodyFontLatin: text(data.bodyFontLatin, d.bodyFontLatin),
+		headingFontEastAsia: text(data.headingFontEastAsia, d.headingFontEastAsia),
+		headingFontLatin: text(data.headingFontLatin, d.headingFontLatin),
 	};
 }
 
@@ -90,6 +132,21 @@ export function parseLines(text: string): string[] {
 
 function oneOf<T extends string>(value: unknown, allowed: readonly T[], fallback: T): T {
 	return typeof value === "string" && (allowed as readonly string[]).includes(value) ? (value as T) : fallback;
+}
+
+function bool(value: unknown, fallback: boolean): boolean {
+	return typeof value === "boolean" ? value : fallback;
+}
+
+function text(value: unknown, fallback: string): string {
+	return typeof value === "string" && value.trim() !== "" ? value.trim() : fallback;
+}
+
+/** 余白（mm）。0 以上 100 未満の数値だけを受け付ける。 */
+function margins(value: unknown, fallback: PluginSettings["marginsMm"]): PluginSettings["marginsMm"] {
+	const v = isRecord(value) ? value : {};
+	const one = (x: unknown, f: number) => (typeof x === "number" && x >= 0 && x < 100 ? x : f);
+	return { top: one(v.top, fallback.top), bottom: one(v.bottom, fallback.bottom), left: one(v.left, fallback.left), right: one(v.right, fallback.right) };
 }
 
 function positiveInt(value: unknown, fallback: number): number {

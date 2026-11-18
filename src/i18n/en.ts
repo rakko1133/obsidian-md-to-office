@@ -4,6 +4,7 @@ export const en = {
 	"settings.heading.targets": "Targets",
 	"settings.heading.run": "Running",
 	"settings.heading.mermaid": "Mermaid images",
+	"settings.heading.word": "Word",
 	"settings.outputLocation.name": "Output location",
 	"settings.outputLocation.desc": "Save into a folder in the vault, or into a folder outside the vault (desktop only).",
 	"settings.outputLocation.vault": "Folder in the vault",
@@ -34,10 +35,28 @@ export const en = {
 	"settings.transparent.name": "Transparent PNG background",
 	"settings.font.name": "Font for diagrams",
 	"settings.font.desc": "CSS font-family used to draw Mermaid diagrams.",
+	"settings.saveImageFiles.name": "Also save diagrams as image files",
+	"settings.saveImageFiles.desc": "When converting to Word, also save Mermaid diagrams as image files next to the document.",
+	"settings.paperSize.name": "Paper size",
+	"settings.orientation.name": "Orientation",
+	"settings.orientation.portrait": "Portrait",
+	"settings.orientation.landscape": "Landscape",
+	"settings.margins.name": "Margins (mm): top, bottom, left, right",
+	"settings.bodyFont.name": "Body font (East Asian / Latin)",
+	"settings.headingFont.name": "Heading font (East Asian / Latin)",
+	"settings.fileNameAsTitle.name": "Use the file name as the document title",
+	"settings.fileNameAsTitle.desc": "Adds the note name as a Title paragraph and moves every heading down one level.",
+	"settings.authorName.name": "Author",
+	"settings.authorName.desc": "Written to the document properties. Leave empty to keep it empty.",
+	"settings.strictLineBreaks.name": "Strict line breaks (fallback)",
+	"settings.strictLineBreaks.desc": "Used only when Obsidian's own setting cannot be read. On: a single line break becomes a space.",
 
 	"menu.saveMermaid": "Save Mermaid diagrams as images",
+	"menu.convertWord": "Convert to Word (.docx)",
 	"command.saveMermaidActive": "Save Mermaid diagrams in the current note as images",
 	"command.saveMermaidVault": "Save Mermaid diagrams in the whole vault as images",
+	"command.convertWordActive": "Convert the current note to Word",
+	"command.convertWordVault": "Convert the whole vault to Word",
 	"command.devWriteSamples": "Developer: write sample .docx and .xlsx",
 
 	"notice.noTargets": "No notes to convert. {excluded} note(s) were excluded.",
@@ -49,12 +68,13 @@ export const en = {
 	"notice.devWriteSamples.failed": "Failed to write sample files: {error}",
 
 	"confirm.title": "Save Mermaid diagrams as images",
+	"confirm.titleWord": "Convert to Word",
 	"confirm.summary": "{selected} of {total} note(s) selected",
 	"confirm.output": "Output: {path}",
 	"confirm.excluded": "Excluded: {count} note(s)",
 	"confirm.calculating": "Calculating…",
-	"confirm.noteSummary": "{diagrams} diagram(s) · new {create} · unchanged {unchanged}",
-	"confirm.totals": "Files: new {create} · unchanged {unchanged}",
+	"confirm.noOutputs": "nothing to write",
+	"confirm.totals": "Files: {summary}",
 	"confirm.run": "Save",
 	"confirm.cancel": "Cancel",
 
@@ -64,7 +84,7 @@ export const en = {
 	"action.skip": "skip",
 	"action.rename": "save with a number",
 
-	"progress.message": "Saving Mermaid images {done} / {total}: {path}",
+	"progress.message": "Converting {done} / {total}: {path}",
 	"progress.cancel": "Stop",
 	"progress.cancelling": "Stopping after the current note…",
 
@@ -84,6 +104,7 @@ export const en = {
 	"reason.inUse": "the file is in use",
 	"reason.protected": "refused to write over a source file",
 	"reason.render": "could not draw the diagram",
+	"reason.exists": "a file with the same name exists",
 
 	"warning.mermaidRenderFailed": "Could not draw a diagram",
 	"warning.pngFailedSvgOnly": "Could not make a PNG; saved the SVG instead",
@@ -92,6 +113,7 @@ export const en = {
 	"warning.manifestSaveFailed": "Could not save the export record (export-manifest.json)",
 	"warning.planChanged": "The file changed after the preview",
 	"warning.cacheFailed": "Could not use the image cache",
+	"warning.unsupportedSyntax": "Not converted yet; kept as Markdown text",
 } as const;
 
 export type MessageKey = keyof typeof en;

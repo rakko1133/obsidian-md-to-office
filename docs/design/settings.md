@@ -21,7 +21,7 @@
 | `onConflict` | `overwrite` / `skip` / `rename`（連番） | `overwrite` | R3 | 1 |
 | `onError` | `continue` / `failFast` | `continue` | R3 | 1 |
 | `timeoutSeconds` | 正の整数（秒） | `30` | R3 | 1 |
-| `saveImageFiles` | 真偽値（変換時に画像ファイルも保存する） | `false` | R8 | 1 |
+| `saveImageFiles` | 真偽値（変換時に画像ファイルも保存する） | `false` | R8 | 2 |
 | `authorName` | 文字列（文書プロパティの作成者名） | 空 | C-8, D-5 | 2 |
 
 ## 対象の選び方（R2）

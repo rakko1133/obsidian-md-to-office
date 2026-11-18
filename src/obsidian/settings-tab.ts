@@ -118,6 +118,56 @@ export class BatchOfficeExportSettingTab extends PluginSettingTab {
 			.setName(t("settings.font.name"))
 			.setDesc(t("settings.font.desc"))
 			.addText((text) => text.setValue(s.mermaidFontFamily).onChange(async (v) => save("mermaidFontFamily", v)));
+		new Setting(containerEl)
+			.setName(t("settings.saveImageFiles.name"))
+			.setDesc(t("settings.saveImageFiles.desc"))
+			.addToggle((tg) => tg.setValue(s.saveImageFiles).onChange(async (v) => save("saveImageFiles", v)));
+
+		// Word
+		new Setting(containerEl).setName(t("settings.heading.word")).setHeading();
+		new Setting(containerEl).setName(t("settings.paperSize.name")).addDropdown((d) =>
+			d
+				.addOption("A4", "A4")
+				.addOption("B5", "B5")
+				.addOption("Letter", "Letter")
+				.setValue(s.paperSize)
+				.onChange(async (v) => save("paperSize", v as PluginSettings["paperSize"])),
+		);
+		new Setting(containerEl).setName(t("settings.orientation.name")).addDropdown((d) =>
+			d
+				.addOption("portrait", t("settings.orientation.portrait"))
+				.addOption("landscape", t("settings.orientation.landscape"))
+				.setValue(s.orientation)
+				.onChange(async (v) => save("orientation", v as PluginSettings["orientation"])),
+		);
+		const margin = new Setting(containerEl).setName(t("settings.margins.name"));
+		for (const side of ["top", "bottom", "left", "right"] as const) {
+			margin.addText((text) => {
+				text.inputEl.type = "number";
+				text.inputEl.style.width = "4.5em";
+				text.setValue(String(s.marginsMm[side])).onChange(async (v) => save("marginsMm", { ...this.plugin.settings.marginsMm, [side]: Number(v) }));
+			});
+		}
+		new Setting(containerEl)
+			.setName(t("settings.bodyFont.name"))
+			.addText((text) => text.setValue(s.bodyFontEastAsia).onChange(async (v) => save("bodyFontEastAsia", v)))
+			.addText((text) => text.setValue(s.bodyFontLatin).onChange(async (v) => save("bodyFontLatin", v)));
+		new Setting(containerEl)
+			.setName(t("settings.headingFont.name"))
+			.addText((text) => text.setValue(s.headingFontEastAsia).onChange(async (v) => save("headingFontEastAsia", v)))
+			.addText((text) => text.setValue(s.headingFontLatin).onChange(async (v) => save("headingFontLatin", v)));
+		new Setting(containerEl)
+			.setName(t("settings.fileNameAsTitle.name"))
+			.setDesc(t("settings.fileNameAsTitle.desc"))
+			.addToggle((tg) => tg.setValue(s.fileNameAsTitle).onChange(async (v) => save("fileNameAsTitle", v)));
+		new Setting(containerEl)
+			.setName(t("settings.authorName.name"))
+			.setDesc(t("settings.authorName.desc"))
+			.addText((text) => text.setValue(s.authorName).onChange(async (v) => save("authorName", v)));
+		new Setting(containerEl)
+			.setName(t("settings.strictLineBreaks.name"))
+			.setDesc(t("settings.strictLineBreaks.desc"))
+			.addToggle((tg) => tg.setValue(s.strictLineBreaksFallback).onChange(async (v) => save("strictLineBreaksFallback", v)));
 	}
 
 	override hide(): void {

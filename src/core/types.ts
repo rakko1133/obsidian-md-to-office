@@ -42,7 +42,8 @@ export type WarningCode =
 	| "manifestBroken"
 	| "manifestSaveFailed"
 	| "planChanged"
-	| "cacheFailed";
+	| "cacheFailed"
+	| "unsupportedSyntax";
 
 /** 予定動作（ドライラン: R3）。 */
 export type PlannedAction = "create" | "overwrite" | "unchanged" | "skip" | "rename";
