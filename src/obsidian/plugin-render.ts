@@ -5,6 +5,7 @@
 // - 外部の画像の取得（A-20 のオプション）、テーマのコールアウトの色（A-6 のオプション）
 import { Component, MarkdownPreviewRenderer, MarkdownRenderer, requestUrl, type App } from "obsidian";
 import { domToMdast, type DomNodeLike } from "../core/dom-to-mdast";
+import { cssColorToHex } from "../core/css-color";
 import { texToSvg } from "../core/math-svg";
 import type { ImageAsset } from "../core/obsidian-syntax";
 import { loadImage } from "./vault-env";
@@ -192,7 +193,11 @@ async function fetchImage(url: string): Promise<ImageAsset> {
 	return loadImage(bytes, ext === "jpeg" ? "jpg" : ext);
 }
 
-/** テーマのコールアウトの色（`--callout-color` の "r, g, b"）を 16 進 6 桁にする。 */
+/**
+ * テーマのコールアウトの色を 16 進 6 桁にする。
+ * Obsidian 1.15 の `--callout-color` は色そのもの（`#086ddd` など）で、古いテーマは "r, g, b" で書く。
+ * どちらでもなければ（`color-mix(…)` など）、`color: var(--callout-color)` をブラウザに計算させた色を読む。
+ */
 function readCalloutColor(type: string): string | undefined {
 	const wrapper = document.createElement("div");
 	wrapper.className = "markdown-rendered batch-office-export-render";
@@ -200,13 +205,14 @@ function readCalloutColor(type: string): string | undefined {
 	const callout = document.createElement("div");
 	callout.className = "callout";
 	callout.setAttribute("data-callout", type);
+	const probe = document.createElement("span");
+	probe.setAttribute("style", "color: var(--callout-color);");
+	callout.appendChild(probe);
 	wrapper.appendChild(callout);
 	document.body.appendChild(wrapper);
 	try {
-		const value = getComputedStyle(callout).getPropertyValue("--callout-color").trim();
-		const parts = value.split(",").map((p) => Number(p.trim()));
-		if (parts.length !== 3 || parts.some((n) => !Number.isFinite(n))) return undefined;
-		return parts.map((n) => Math.max(0, Math.min(255, Math.round(n))).toString(16).padStart(2, "0")).join("").toUpperCase();
+		const raw = getComputedStyle(callout).getPropertyValue("--callout-color");
+		return cssColorToHex(raw) ?? (raw.trim() === "" ? undefined : cssColorToHex(getComputedStyle(probe).color));
 	} finally {
 		wrapper.remove();
 	}
