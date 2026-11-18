@@ -1,7 +1,8 @@
 // ノート 1 件を .docx にする（04 → 06 → 07 → 09 の流れ・フェーズ 2）と、そのドライラン（02）。
 // Obsidian API に依存しない。描画・キャッシュ・書き込みは引数の部品に任せる。
 import type { Root } from "mdast";
-import { renderDocx, type DiagramAsset } from "./docx-render";
+import { renderDocx, type DiagramAsset, type DocxRenderOptions } from "./docx-render";
+import type { WordTemplate } from "./docx-template";
 import { mapFrontmatter, valueToText, type MappedProperties } from "./frontmatter";
 import { visitMermaidCodes } from "./markdown";
 import { buildRenderSource, diagramHash, type MermaidBlock, type MermaidRenderParams } from "./mermaid";
@@ -28,6 +29,28 @@ export interface DocxExportDeps extends MermaidExportDeps {
 	convertedNotes?: ReadonlySet<string>;
 	/** 目次の見出しの文字（C-4a。UI の言語に合わせる） */
 	tocLabel?: string;
+	/** 図表番号の「図」「表」の文字（R4・C-4b。UI の言語に合わせる） */
+	captionLabels?: { figure: string; table: string };
+	/** 読み込んだテンプレート（C-1b）。読めなかったときは undefined */
+	template?: WordTemplate;
+}
+
+/** 体裁の指定（C-1b・C-1c・C-2・C-4b・C-6）。1 ノート = 1 .docx と結合出力で共用。 */
+export function styleOptions(
+	settings: PluginSettings,
+	deps: Pick<DocxExportDeps, "captionLabels" | "template">,
+): Pick<DocxRenderOptions, "template" | "headingNumbering" | "pageBreakBeforeH1" | "tableFullWidth" | "captions"> {
+	const captions = {
+		...(settings.figureCaptions && deps.captionLabels ? { figure: deps.captionLabels.figure } : {}),
+		...(settings.tableCaptions && deps.captionLabels ? { table: deps.captionLabels.table } : {}),
+	};
+	return {
+		...(deps.template ? { template: deps.template } : {}),
+		headingNumbering: settings.headingNumbering,
+		pageBreakBeforeH1: settings.pageBreakBeforeH1,
+		tableFullWidth: settings.tableFullWidth,
+		...(Object.keys(captions).length > 0 ? { captions } : {}),
+	};
 }
 
 /** 組み立てたノート 1 件（.docx にする直前: 1 ノート = 1 .docx と結合出力の章で共用）。 */
@@ -175,6 +198,7 @@ export async function exportDocxNote(
 			properties: fm.properties,
 			...(settings.frontmatterTable ? { propertiesTable: fm.table } : {}),
 			...pageDecorations(settings, { title, author: fm.author ?? settings.authorName, date: valueToText(prepared.rawFrontmatter?.date), combined: false }, deps.tocLabel),
+			...styleOptions(settings, deps),
 		}),
 	);
 
