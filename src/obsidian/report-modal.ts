@@ -30,7 +30,8 @@ class ReportModal extends Modal {
 
 		const count = (s: NoteResult["status"]) => String(results.filter((r) => r.status === s).length);
 		contentEl.createEl("p", { text: t("report.counts", { success: count("success"), skipped: count("skipped"), failed: count("failed") }) });
-		const files = results.flatMap((r) => r.files);
+		// 束ねた出力（1 フォルダ = 1 ブック）は、そのブックの全ノートに同じ結果が付くので、出力ごとに 1 回だけ数える
+		const files = [...new Map(results.flatMap((r) => r.files).map((f) => [`${f.output.location}:${f.output.path}`, f])).values()];
 		contentEl.createEl("p", {
 			text: t("report.files", {
 				written: String(files.filter((f) => f.status === "success").length),
