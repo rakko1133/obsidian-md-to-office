@@ -214,6 +214,7 @@ sequenceDiagram
 - 描画先は document につなぎ、`position: fixed` で画面外に置いて `visibility: hidden` にする（「描画先の DOM 要素を document につなぐか」を解決）。終わったら `Component.unload()` と要素の削除で片付ける
 - プラグインが描画したかの判定: 描画する前に登録の一覧（`MarkdownPreviewRenderer.codeBlockPostProcessors`、非公開）で判別し、描画後も結果が `pre > code` だけ・空なら「描画できなかった」にする
 - canvas は後片付けの前に PNG にする。tainted な canvas などで画像にできなければ、その画像だけを落とす
-- 数式（A-11）は `docx/math` の `latexToMath` で直接 OMML にするので、MathJax は変換できない式の画像化だけに使う（「数式の描画依頼の範囲」を解決）。MathJax の SVG の `<use>` が文書の共有のフォントキャッシュを指すときは、参照先を SVG の中に写す
+- 数式（A-11）は `docx/math` の `latexToMath` で直接 OMML にするので、MathJax は変換できない式の画像化だけに使う（「数式の描画依頼の範囲」を解決）
+  - 2026-11-18 更新: Obsidian 1.15.1 同梱の MathJax は CHTML 出力（`tex2chtml`）だけで `tex2svg` がなく、画像化は実際には動いていなかった。プラグインに同梱した `mathjax-full` 3.2.2 の SVG 出力（DOM を使わない liteAdaptor、`fontCache: none`）に切り替え、変換の本体は Obsidian に依存しない `src/core/math-svg.ts` に置いた。このコンポーネントは SVG を画像（PNG の代替付き）にするだけ
 - 副作用（dataviewjs などが任意の処理を実行できること）は、README（フェーズ 6）に書く（「描画したプラグインが外部に及ぼす副作用」を解決）
 - ホスト関数は `renderableLanguage`・`renderBlock`・`renderMath`・`fetchImage`・`calloutColor`（案の `requestRender` を置き換えた）

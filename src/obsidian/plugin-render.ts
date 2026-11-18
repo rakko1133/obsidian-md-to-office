@@ -1,10 +1,11 @@
 // Obsidian に描画を依頼する処理（05: Obsidian に描画を依頼・フェーズ 3b）。
 // - dataview・dataviewjs・他のプラグインのコードブロック: 画面の外に置いた要素で MarkdownRenderer.render() を呼び、
 //   DOM の変化が止まるのを待って、結果を mdast にする（A-24・A-26）
-// - 数式の画像: Obsidian 同梱の MathJax で SVG にする（A-11 の代替）
+// - 数式の画像: プラグインに含めた MathJax（mathjax-full）で SVG にする（A-11 の代替。Obsidian 同梱の MathJax は SVG を作れない）
 // - 外部の画像の取得（A-20 のオプション）、テーマのコールアウトの色（A-6 のオプション）
-import { Component, MarkdownPreviewRenderer, MarkdownRenderer, loadMathJax, requestUrl, type App } from "obsidian";
+import { Component, MarkdownPreviewRenderer, MarkdownRenderer, requestUrl, type App } from "obsidian";
 import { domToMdast, type DomNodeLike } from "../core/dom-to-mdast";
+import { texToSvg } from "../core/math-svg";
 import type { ImageAsset } from "../core/obsidian-syntax";
 import { loadImage } from "./vault-env";
 
@@ -142,7 +143,7 @@ async function rasterize(el: Element): Promise<ImageAsset | null> {
 	return null;
 }
 
-/** `<use href="#id">` が文書の別の場所を指しているとき、その要素を SVG の中に写す（MathJax の共有のフォントキャッシュなど）。 */
+/** `<use href="#id">` が文書の別の場所を指しているとき、その要素を SVG の中に写す（描画結果の SVG が共有の定義を参照しているときなど）。 */
 function inlineUses(svg: SVGSVGElement): void {
 	let defs = svg.querySelector("defs");
 	for (const use of Array.from(svg.querySelectorAll("use"))) {
@@ -165,28 +166,9 @@ function inlineUses(svg: SVGSVGElement): void {
 	}
 }
 
-/** MathJax で数式を SVG にする。ex の単位は px にする（1 ex = 8 px で近似）。 */
+/** 数式を SVG の画像にする。Obsidian 同梱の MathJax は CHTML 出力だけなので、プラグインに含めた MathJax を使う。 */
 async function renderMath(latex: string, display: boolean): Promise<ImageAsset> {
-	await loadMathJax();
-	const mathJax = (window as unknown as { MathJax?: { tex2svg?: (tex: string, options: { display: boolean }) => HTMLElement } }).MathJax;
-	if (!mathJax?.tex2svg) throw new Error("MathJax is not available");
-	const container = mathJax.tex2svg(latex, { display });
-	if (container.querySelector('[data-mml-node="merror"]')) throw new Error("MathJax could not read the formula");
-	const svg = container.querySelector("svg");
-	if (!svg) throw new Error("MathJax returned no SVG");
-	const toPx = (value: string | null) => {
-		const m = /^([\d.]+)ex$/.exec(value ?? "");
-		return m ? Number(m[1]) * 8 : Number.parseFloat(value ?? "") || 0;
-	};
-	const clone = svg.cloneNode(true) as SVGSVGElement;
-	const width = toPx(svg.getAttribute("width")) || 100;
-	const height = toPx(svg.getAttribute("height")) || 20;
-	clone.setAttribute("width", String(width));
-	clone.setAttribute("height", String(height));
-	clone.setAttribute("xmlns", "http://www.w3.org/2000/svg");
-	clone.removeAttribute("style");
-	inlineUses(clone);
-	return loadImage(new TextEncoder().encode(new XMLSerializer().serializeToString(clone)), "svg");
+	return loadImage(new TextEncoder().encode(texToSvg(latex, display).svg), "svg");
 }
 
 const MIME_EXTENSIONS: Record<string, string> = {
