@@ -55,6 +55,11 @@ export const en = {
 	"settings.keepComments.desc": "Off: %%comments%% are removed. On: they become comments in the Word document.",
 	"settings.frontmatterTable.name": "Properties table at the top",
 	"settings.frontmatterTable.desc": "Adds a table of the note's properties (frontmatter) before the body.",
+	"settings.downloadExternalImages.name": "Download external images",
+	"settings.downloadExternalImages.desc": "Off: images from the web become links. On: they are downloaded (up to 20 MB each) and embedded.",
+	"settings.calloutColor.name": "Callout colors",
+	"settings.calloutColor.fixed": "Default colors",
+	"settings.calloutColor.theme": "Colors of the current theme",
 
 	"menu.saveMermaid": "Save Mermaid diagrams as images",
 	"menu.convertWord": "Convert to Word (.docx)",
@@ -124,6 +129,10 @@ export const en = {
 	"warning.embedDepth": "Embedded notes are nested too deeply (more than 5 levels); kept as a link",
 	"warning.imageFailed": "Could not read an image",
 	"warning.unsupportedEmbed": "This embed is not converted yet; kept as text",
+	"warning.pluginMissing": "The plugin for this code block is not enabled; kept as code",
+	"warning.renderFailed": "Obsidian could not draw this code block; kept as code",
+	"warning.mathAsImage": "This formula could not become a Word equation; inserted as an image",
+	"warning.mathFailed": "Could not convert a formula; kept as LaTeX",
 } as const;
 
 export type MessageKey = keyof typeof en;
