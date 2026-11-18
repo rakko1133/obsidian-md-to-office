@@ -10,6 +10,10 @@ import {
 	CommentRangeStart,
 	CommentReference,
 	Document,
+	Footer,
+	Header,
+	PageNumber,
+	TableOfContents,
 	ExternalHyperlink,
 	FootnoteReferenceRun,
 	HeadingLevel,
@@ -90,6 +94,14 @@ export interface DocxRenderOptions {
 	properties?: DocumentProperties;
 	/** 冒頭に出すプロパティの表（A-27 のオプション） */
 	propertiesTable?: readonly [string, string][];
+	/** フッター中央のページ番号「n / 総ページ数」（C-5） */
+	footerPageNumber?: boolean;
+	/** ヘッダーに文書のタイトル（C-5） */
+	headerTitle?: boolean;
+	/** 表紙（C-8）。表紙のページにはヘッダー・フッターを出さない */
+	cover?: { title: string; author?: string; date: string };
+	/** 目次（C-4a）の見出しの文字。なければ目次を入れない */
+	tableOfContents?: string;
 }
 
 /** 用紙の大きさ（mm、縦向き）。B5 は JIS B5。 */
@@ -659,7 +671,25 @@ class Renderer {
 export async function renderDocx(tree: Root, options: DocxRenderOptions): Promise<ArrayBuffer> {
 	const renderer = new Renderer(options, tree);
 	const shift = options.fileNameAsTitle ? 1 : 0;
-	const children: Block[] = [];
+	const children: (Block | TableOfContents)[] = [];
+	// 表紙（C-8）: タイトル・作成者・日付を 1 ページ目に置き、改ページする
+	if (options.cover) {
+		const { cover } = options;
+		children.push(
+			new Paragraph({ spacing: { before: 4800 }, alignment: AlignmentType.CENTER, heading: HeadingLevel.TITLE, children: [new TextRun({ text: cover.title, size: 56 })] }),
+			...(cover.author ? [new Paragraph({ spacing: { before: 1200 }, alignment: AlignmentType.CENTER, children: [new TextRun({ text: cover.author, size: 28 })] })] : []),
+			new Paragraph({ spacing: { before: cover.author ? 240 : 1200 }, alignment: AlignmentType.CENTER, children: [new TextRun({ text: cover.date, size: 24 })] }),
+			new Paragraph({ children: [new DocxPageBreak()] }),
+		);
+	}
+	// 目次（C-4a）: 見出し 1〜3 の TOC フィールド。開いたときに Word が更新する（updateFields）
+	if (options.tableOfContents !== undefined) {
+		children.push(
+			new Paragraph({ children: [new TextRun({ text: options.tableOfContents, bold: true, size: 32 })] }),
+			new TableOfContents(options.tableOfContents, { hyperlink: true, headingStyleRange: "1-3" }),
+			new Paragraph({ children: [new DocxPageBreak()] }),
+		);
+	}
 	if (options.fileNameAsTitle) children.push(new Paragraph({ heading: HeadingLevel.TITLE, children: [new TextRun(options.title)] }));
 	if (options.propertiesTable && options.propertiesTable.length > 0) children.push(renderer.propertiesTable(options.propertiesTable), new Paragraph({ children: [] }));
 	children.push(...renderer.blocks(tree.children, shift));
@@ -715,9 +745,12 @@ export async function renderDocx(tree: Root, options: DocxRenderOptions): Promis
 			],
 		},
 		numbering: { config: renderer.numbering.config() },
+		...(options.tableOfContents !== undefined ? { features: { updateFields: true } } : {}),
 		sections: [
 			{
+				...headersAndFooters(options),
 				properties: {
+					...(options.cover ? { titlePage: true } : {}),
 					page: {
 						size: {
 							width: convertMillimetersToTwip(paper.width),
@@ -739,6 +772,22 @@ export async function renderDocx(tree: Root, options: DocxRenderOptions): Promis
 	const created = options.properties?.created;
 	const overrides = created ? [{ path: "docProps/core.xml", data: coreXml(options, created) }] : [];
 	return Packer.pack(doc, "arraybuffer", false, overrides);
+}
+
+/** ヘッダーのタイトルとフッターのページ番号（C-5）。表紙があるときは、先頭ページ（表紙）だけ空にする。 */
+function headersAndFooters(options: DocxRenderOptions): { headers?: { default: Header; first?: Header }; footers?: { default: Footer; first?: Footer } } {
+	const out: { headers?: { default: Header; first?: Header }; footers?: { default: Footer; first?: Footer } } = {};
+	if (options.headerTitle) {
+		const header = new Header({ children: [new Paragraph({ alignment: AlignmentType.RIGHT, children: [new TextRun({ text: options.title, size: 18, color: "595959" })] })] });
+		out.headers = { default: header, ...(options.cover ? { first: new Header({ children: [] }) } : {}) };
+	}
+	if (options.footerPageNumber) {
+		const footer = new Footer({
+			children: [new Paragraph({ alignment: AlignmentType.CENTER, children: [new TextRun({ children: [PageNumber.CURRENT, " / ", PageNumber.TOTAL_PAGES], size: 18 })] })],
+		});
+		out.footers = { default: footer, ...(options.cover ? { first: new Footer({ children: [] }) } : {}) };
+	}
+	return out;
 }
 
 function escapeXml(text: string): string {

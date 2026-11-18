@@ -1,6 +1,6 @@
 # 設定の一覧
 
-最終更新: 2026-11-18（フェーズ 4a・4b の Excel の設定を反映）
+最終更新: 2026-11-18（フェーズ 5a の Word の設定を反映し、作られていなかった設定を 5b に移した）
 段階: フェーズ 0 で作成（G5・完了条件 E1）。「実装」が 0 と 1 の項目はフェーズ 1 までに実装する。既定値はフェーズ 1 の決定事項（requirements.md）を反映済み
 
 - 設定値は `data.json` に保存する。型と既定値の実装は `src/core/settings.ts`、画面は `src/obsidian/settings-tab.ts`
@@ -41,7 +41,7 @@ frontmatter の `export: false` による除外は常に有効で、設定は持
 | `pngDpi` | 正の整数 | `192` | R4 | 1 |
 | `pngTransparentBackground` | 真偽値 | `false` | R4 | 1 |
 | `mermaidFontFamily` | CSS の font-family | `"Yu Gothic", "YuGothic", "Hiragino Sans", "Meiryo", sans-serif` | R4 | 1 |
-| `figureCaptions` | 真偽値（図番号キャプションと代替テキスト） | `false` | R4, C-4b | 2 |
+| `figureCaptions` | 真偽値（図番号キャプションと代替テキスト） | `false` | R4, C-4b | 5b（フェーズ 2 では作らなかった） |
 
 テーマは `neutral` に固定し、設定は持たない（R4）。
 
@@ -62,22 +62,22 @@ frontmatter の `export: false` による除外は常に有効で、設定は持
 
 | キー | 値 | 既定値 | 要件 | 実装 |
 |---|---|---|---|---|
-| `wordTemplatePath` | .docx / .dotx のパス | 空（内蔵の既定スタイル） | C-1b | 3 |
-| `headingNumbering` | 真偽値 | `false` | A-1, C-1c | 3 |
+| `wordTemplatePath` | .docx / .dotx のパス | 空（内蔵の既定スタイル） | C-1b | 5b（フェーズ 3 では作らなかった） |
+| `headingNumbering` | 真偽値 | `false` | A-1, C-1c | 5b（フェーズ 3 では作らなかった） |
 | `paperSize` | `A4` / `B5` / `Letter` | `A4` | C-2 | 2 |
 | `marginsMm` | 上・下・左・右（mm） | 各 `25` | C-2 | 2 |
 | `orientation` | `portrait` / `landscape` | `portrait` | C-2 | 2 |
-| `pageBreakBeforeH1` | 真偽値 | `false` | C-2 | 3 |
+| `pageBreakBeforeH1` | 真偽値 | `false` | C-2 | 5b（フェーズ 3 では作らなかった） |
 | `bodyFontEastAsia` / `bodyFontLatin` | フォント名 | `游明朝` / `Century` | C-3 | 2 |
 | `headingFontEastAsia` / `headingFontLatin` | フォント名 | `游ゴシック` / `Arial` | C-3 | 2 |
-| `tableOfContents` | 真偽値 | `false`（結合出力では `true`） | C-4a | 5 |
-| `tableCaptions` | 真偽値（画像の「図 n」と表の「表 n」） | `false` | C-4b | 5 |
-| `footerPageNumber` | 真偽値 | `true` | C-5 | 5 |
-| `headerTitle` | 真偽値 | `false` | C-5 | 5 |
-| `tableFullWidth` | 真偽値（表を本文の幅いっぱいにする） | `false`（内容に合わせる） | C-6 | 3 |
-| `combineOrder` | `fileName` / `frontmatterOrder` / `moc` | `fileName` | C-8 | 5 |
-| `coverPage` | 真偽値 | `false` | C-8 | 5 |
-| `defaultCombine` | 真偽値（対象確認モーダルの結合出力の初期値） | `false` | C-8 | 5 |
+| `tableOfContents` | `never` / `combined` / `always` | `combined`（結合出力のときだけ） | C-4a | 5a |
+| `tableCaptions` | 真偽値（画像の「図 n」と表の「表 n」） | `false` | C-4b | 5b |
+| `footerPageNumber` | 真偽値 | `true` | C-5 | 5a |
+| `headerTitle` | 真偽値 | `false` | C-5 | 5a |
+| `tableFullWidth` | 真偽値（表を本文の幅いっぱいにする） | `false`（内容に合わせる） | C-6 | 5b（フェーズ 3 では作らなかった） |
+| `combineOrder` | `fileName` / `frontmatterOrder` / `moc` | `fileName` | C-8 | 5a |
+| `coverPage` | 真偽値 | `false` | C-8 | 5a |
+| `defaultCombine` | 真偽値（対象確認モーダルの結合出力の初期値） | `false` | C-8 | 5a |
 
 ## Excel（R7・A-30〜A-34・R8）
 

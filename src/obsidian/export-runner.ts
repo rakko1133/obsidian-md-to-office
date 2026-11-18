@@ -8,6 +8,7 @@ import { exportDocxNote, planDocxNote, type PlannedOutput, type VaultEnvironment
 import { applyResults } from "../core/manifest";
 import { exportMermaidNote, planMermaidNote, type MermaidExportDeps } from "../core/mermaid-export";
 import { failedResult, mergeResults, runSequential } from "../core/run";
+import { DocxCombineRun, planCombinedNote } from "../core/docx-combine";
 import { XlsxRun, planXlsxNote, xlsxUnit } from "../core/xlsx-export";
 import { SummaryRun, planSummary, type SummaryLabels } from "../core/xlsx-summary";
 import type { XlsxLabels } from "../core/xlsx-render";
@@ -52,6 +53,12 @@ interface ModeContext {
 	xlsx?: XlsxRun;
 	/** Vault 全体の集計の状態（A-34） */
 	summary?: SummaryRun;
+	/** 1 フォルダを 1 つの .docx にまとめる（C-8。確認画面で選ぶ） */
+	combine: boolean;
+	/** 結合出力の状態 */
+	combined?: DocxCombineRun;
+	/** 開始時に読んだマニフェスト（結合出力の変換対象の範囲: A-18） */
+	manifest?: ManifestSnapshot;
 }
 
 /** モードごとの違い: 確認画面の題名、ドライラン、ノート 1 件の処理。 */
@@ -73,14 +80,28 @@ const MODES: Record<Exclude<ExportMode, "office">, ModeDefinition> = {
 	},
 	docx: {
 		title: () => t("confirm.titleWord"),
-		plan: async ({ settings, deps }, path) => {
+		plan: async ({ settings, deps, vault, combine }, path) => {
 			const exists = (ref: OutputRef) => deps.writer.exists(ref);
-			const plans = await planDocxNote(path, settings, exists);
+			const plans = combine ? await planCombinedNote(path, settings, vault.vaultName, exists) : await planDocxNote(path, settings, exists);
 			if (settings.saveImageFiles) plans.push(...(await planMermaidNote(path, await deps.readNote(path), settings, deps.renderer.version, exists)));
 			return plans;
 		},
-		process: ({ settings, deps, app, vault, selected }, path, signal, manifest) =>
-			exportDocxNote(path, signal, settings, manifest, { ...deps, strictLineBreaks: readStrictLineBreaks(app), vault, convertedNotes: selected }),
+		start: (ctx, selected) => {
+			if (!ctx.combine) return;
+			ctx.combined = new DocxCombineRun(ctx.settings, selected, ctx.manifest ?? { entries: [] }, {
+				...ctx.deps,
+				strictLineBreaks: readStrictLineBreaks(ctx.app),
+				vault: ctx.vault,
+				tocLabel: t("docx.toc"),
+			});
+		},
+		process: ({ settings, deps, app, vault, selected, combined }, path, signal, manifest) =>
+			combined
+				? combined.addNote(path, signal)
+				: exportDocxNote(path, signal, settings, manifest, { ...deps, strictLineBreaks: readStrictLineBreaks(app), vault, convertedNotes: selected, tocLabel: t("docx.toc") }),
+		finish: async ({ combined }, results) => {
+			await combined?.finish(results);
+		},
 	},
 	xlsx: {
 		title: () => t("confirm.titleExcel"),
@@ -95,7 +116,10 @@ const MODES: Record<Exclude<ExportMode, "office">, ModeDefinition> = {
 	both: {
 		title: () => t("confirm.titleBoth"),
 		plan: async (ctx, path) => [...(await MODES.docx.plan(ctx, path)), ...(await MODES.xlsx.plan(ctx, path))],
-		start: (ctx, selected) => MODES.xlsx.start!(ctx, selected),
+		start: (ctx, selected) => {
+			MODES.docx.start!(ctx, selected);
+			MODES.xlsx.start!(ctx, selected);
+		},
 		// ノートごとに .docx を作り、同じノートを Excel のブックにも足す。結果は 2 つの出力のうち重いほう（D5）。表がないことは Excel だけの事情なので、ノートのスキップにしない
 		process: async (ctx, path, signal, manifest) => {
 			const toFailed = (error: unknown) => failedResult(path, error instanceof Error ? error.message : String(error));
@@ -103,7 +127,10 @@ const MODES: Record<Exclude<ExportMode, "office">, ModeDefinition> = {
 			const xlsx = await MODES.xlsx.process(ctx, path, signal, manifest).catch(toFailed);
 			return mergeResults(docx, xlsx);
 		},
-		finish: (ctx, results) => MODES.xlsx.finish!(ctx, results),
+		finish: async (ctx, results) => {
+			await MODES.docx.finish!(ctx, results);
+			await MODES.xlsx.finish!(ctx, results);
+		},
 	},
 	summary: {
 		title: () => t("confirm.titleSummary"),
@@ -166,6 +193,8 @@ let running = false;
 export interface AutoRunOptions {
 	/** この実行だけに使う設定の上書き（保存しない） */
 	settings?: Partial<PluginSettings>;
+	/** 1 フォルダを 1 つの .docx にまとめる（C-8） */
+	combine?: boolean;
 }
 
 export interface RunReport {
@@ -239,6 +268,7 @@ export async function runExport(host: ExportHost, mode: ExportMode, source: Targ
 			vault: await createVaultEnvironment(app),
 			selected: new Set(),
 			targetCount: targets.length,
+			combine: auto ? (auto.combine ?? false) : settings.defaultCombine,
 		};
 
 		// 02: 実行前の確認画面（ドライラン）
@@ -260,8 +290,9 @@ export async function runExport(host: ExportHost, mode: ExportMode, source: Targ
 						? {
 								formats: {
 									initial: initialFormat,
+									combine: settings.defaultCombine,
 									title: (format: OfficeFormat) => MODES[FORMAT_MODES[format]].title(),
-									plan: (format: OfficeFormat, path: string) => MODES[FORMAT_MODES[format]].plan(ctx, path),
+									plan: (format: OfficeFormat, combine: boolean, path: string) => MODES[FORMAT_MODES[format]].plan({ ...ctx, combine }, path),
 								},
 							}
 						: {}),
@@ -269,12 +300,14 @@ export async function runExport(host: ExportHost, mode: ExportMode, source: Targ
 		const chosen = Array.isArray(selected) ? { notes: selected } : selected;
 		if (!chosen || chosen.notes.length === 0) return null;
 		if (chosen.format) definition = MODES[FORMAT_MODES[chosen.format]];
+		if (chosen.combine !== undefined) ctx.combine = chosen.combine;
 		const notes = chosen.notes;
 		ctx.selected = new Set(notes);
-		definition.start?.(ctx, notes);
 
 		// 10: マニフェストは開始時に 1 回だけ読む（D4）
 		const { snapshot, warnings: loadWarnings } = await store.load();
+		ctx.manifest = snapshot;
+		definition.start?.(ctx, notes);
 		const runWarnings: Warning[] = [...loadWarnings];
 
 		// 03: 1 件ずつ順に変換

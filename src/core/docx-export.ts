@@ -2,11 +2,11 @@
 // Obsidian API に依存しない。描画・キャッシュ・書き込みは引数の部品に任せる。
 import type { Root } from "mdast";
 import { renderDocx, type DiagramAsset } from "./docx-render";
-import { mapFrontmatter } from "./frontmatter";
+import { mapFrontmatter, valueToText, type MappedProperties } from "./frontmatter";
 import { visitMermaidCodes } from "./markdown";
 import { buildRenderSource, diagramHash, type MermaidBlock, type MermaidRenderParams } from "./mermaid";
 import { exportMermaidNote, renderParams, type MermaidExportDeps } from "./mermaid-export";
-import { assembleNote, type NoteEnvironment } from "./note-assembly";
+import { assembleNote, type AssembledNote, type NoteEnvironment } from "./note-assembly";
 import { joinPath, noteBaseName, outputDirFor, plannedAction, relativeUrl } from "./output-plan";
 import { setPngDpi } from "./png";
 import { aggregateStatus } from "./run";
@@ -26,6 +26,38 @@ export interface DocxExportDeps extends MermaidExportDeps {
 	vault?: VaultEnvironment;
 	/** 今回の実行の対象ノート（内部リンクの「変換対象」の範囲: A-18） */
 	convertedNotes?: ReadonlySet<string>;
+	/** 目次の見出しの文字（C-4a。UI の言語に合わせる） */
+	tocLabel?: string;
+}
+
+/** 組み立てたノート 1 件（.docx にする直前: 1 ノート = 1 .docx と結合出力の章で共用）。 */
+export interface PreparedDocxNote {
+	assembled: AssembledNote;
+	diagrams: Map<number, DiagramAsset>;
+	fm: MappedProperties;
+	/** frontmatter の生の値（表紙の date・結合出力の order） */
+	rawFrontmatter: Readonly<Record<string, unknown>> | undefined;
+	warnings: Warning[];
+}
+
+/** 今日の日付（表紙: C-8）。YYYY-MM-DD。 */
+export function today(now = new Date()): string {
+	return `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, "0")}-${String(now.getDate()).padStart(2, "0")}`;
+}
+
+/** 表紙・目次・ヘッダー・フッターの指定（C-4a・C-5・C-8）。 */
+export function pageDecorations(
+	settings: PluginSettings,
+	doc: { title: string; author?: string; date?: string; combined: boolean },
+	tocLabel: string | undefined,
+): { footerPageNumber: boolean; headerTitle: boolean; cover?: { title: string; author?: string; date: string }; tableOfContents?: string } {
+	const toc = settings.tableOfContents === "always" || (settings.tableOfContents === "combined" && doc.combined);
+	return {
+		footerPageNumber: settings.footerPageNumber,
+		headerTitle: settings.headerTitle,
+		...(settings.coverPage ? { cover: { title: doc.title, ...(doc.author ? { author: doc.author } : {}), date: doc.date || today() } } : {}),
+		...(toc && tocLabel !== undefined ? { tableOfContents: tocLabel } : {}),
+	};
 }
 
 const EMPTY_VAULT: VaultEnvironment = { resolveLink: () => null, fileExists: () => false, vaultName: "" };
@@ -110,42 +142,23 @@ export async function exportDocxNote(
 		warnings.push(...images.warnings.filter((w) => w.code !== "noDiagrams"));
 	}
 
-	// 構文解析・変換・埋め込みの展開・リンクの解決・画像の準備（フェーズ 3a）
-	const vault = deps.vault ?? EMPTY_VAULT;
 	const ownOutput = docxOutputRef(notePath, settings);
 	const converted = convertedNotes(deps.convertedNotes, manifest);
-	const { calloutColor, ...rest } = vault;
-	const env: NoteEnvironment = {
-		...rest,
-		// テーマの色はオプションのときだけ読む（A-6）
-		...(settings.calloutColorSource === "theme" && calloutColor ? { calloutColor } : {}),
-		readNote: deps.readNote,
+	const prepared = await prepareDocxNote(notePath, signal, settings, deps, {
 		isConverted: (path) => converted.has(path),
 		docxLink: (target) => relativeUrl(ownOutput, docxOutputRef(target, settings)),
-	};
-	const assembled = await assembleNote(notePath, env, { keepComments: settings.keepCommentsAsWordComments, downloadExternalImages: settings.downloadExternalImages, signal });
+	});
+	const { assembled, diagrams, fm } = prepared;
 	const { tree } = assembled;
-	warnings.push(...assembled.warnings);
-	const fm = mapFrontmatter(vault.frontmatter?.(notePath));
-
-	const params = renderParams(settings);
-	const diagrams = new Map<number, DiagramAsset>();
-	for (const block of mermaidBlocksOf(tree)) {
-		try {
-			diagrams.set(block.index, await diagramAsset(block, params, deps, signal));
-		} catch (error) {
-			if (signal.aborted) throw error;
-			// 描画に失敗した図は、ソースをコードブロックとして残す（R4）
-			const detail = `${block.index}: ${error instanceof Error ? error.message : String(error)}`;
-			if (!warnings.some((w) => w.code === "mermaidRenderFailed" && w.detail?.startsWith(`${block.index}:`))) warnings.push({ code: "mermaidRenderFailed", detail });
-		}
-	}
+	warnings.push(...prepared.warnings);
+	const title = fm.title ?? noteBaseName(notePath);
+	const creator = fm.author ?? settings.authorName;
 
 	if (signal.aborted) throw signal.reason instanceof Error ? signal.reason : new Error("aborted");
 	const bytes = new Uint8Array(
 		await renderDocx(tree, {
-			title: fm.title ?? noteBaseName(notePath),
-			creator: fm.author ?? settings.authorName,
+			title,
+			creator,
 			strictLineBreaks: deps.strictLineBreaks ?? settings.strictLineBreaksFallback,
 			fileNameAsTitle: settings.fileNameAsTitle,
 			page: { paperSize: settings.paperSize, orientation: settings.orientation, marginsMm: settings.marginsMm },
@@ -161,11 +174,53 @@ export async function exportDocxNote(
 			comments: assembled.comments,
 			properties: fm.properties,
 			...(settings.frontmatterTable ? { propertiesTable: fm.table } : {}),
+			...pageDecorations(settings, { title, author: fm.author ?? settings.authorName, date: valueToText(prepared.rawFrontmatter?.date), combined: false }, deps.tocLabel),
 		}),
 	);
 
 	files.push(await writeWithConflictPolicy(ownOutput, bytes, settings.onConflict, deps, signal, "docx"));
 	return { notePath, status: aggregateStatus(files), files, warnings, deleted };
+}
+
+/**
+ * ノート 1 件を組み立てる: 構文解析・変換・埋め込みの展開・リンクの解決・画像の準備（フェーズ 3a）と、Mermaid の図の描画（R4）。
+ * 内部リンクの「変換対象か」と「リンク先の URL」は呼び出し側が決める（1 ノート = 1 .docx と結合出力で違う）。
+ */
+export async function prepareDocxNote(
+	notePath: string,
+	signal: AbortSignal,
+	settings: PluginSettings,
+	deps: DocxExportDeps,
+	links: Pick<NoteEnvironment, "isConverted" | "docxLink">,
+): Promise<PreparedDocxNote> {
+	const warnings: Warning[] = [];
+	const vault = deps.vault ?? EMPTY_VAULT;
+	const { calloutColor, ...rest } = vault;
+	const env: NoteEnvironment = {
+		...rest,
+		// テーマの色はオプションのときだけ読む（A-6）
+		...(settings.calloutColorSource === "theme" && calloutColor ? { calloutColor } : {}),
+		readNote: deps.readNote,
+		...links,
+	};
+	const assembled = await assembleNote(notePath, env, { keepComments: settings.keepCommentsAsWordComments, downloadExternalImages: settings.downloadExternalImages, signal });
+	warnings.push(...assembled.warnings);
+	const rawFrontmatter = vault.frontmatter?.(notePath);
+	const fm = mapFrontmatter(rawFrontmatter);
+
+	const params = renderParams(settings);
+	const diagrams = new Map<number, DiagramAsset>();
+	for (const block of mermaidBlocksOf(assembled.tree)) {
+		try {
+			diagrams.set(block.index, await diagramAsset(block, params, deps, signal));
+		} catch (error) {
+			if (signal.aborted) throw error;
+			// 描画に失敗した図は、ソースをコードブロックとして残す（R4）
+			const detail = `${block.index}: ${error instanceof Error ? error.message : String(error)}`;
+			if (!warnings.some((w) => w.code === "mermaidRenderFailed" && w.detail?.startsWith(`${block.index}:`))) warnings.push({ code: "mermaidRenderFailed", detail });
+		}
+	}
+	return { assembled, diagrams, fm, rawFrontmatter, warnings };
 }
 
 /** 同名ファイルの設定（R3）に従って書き込む。予定動作は書き込みの時点の状態で判定し直す（.docx・.xlsx で共用）。 */
