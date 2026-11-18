@@ -93,7 +93,9 @@ Obsidian のコミュニティプラグインは、`manifest.json` の `version`
 2. プラグインを追加する（リポジトリ `rakko1133/obsidian-md-to-office`）。ディレクトリは既定のブランチの先頭の `manifest.json` を読み、その `version` の GitHub Release から配布物を取る
 3. 自動レビューの指摘が出たら、直して版を上げた Release を出す。エラーが残っている間は Obsidian からインストールできない
 
-自動レビューの前に `npm run lint`（公式の ESLint プラグイン `eslint-plugin-obsidianmd` の推奨設定、`eslint.config.mjs`）で `src/` を検査しておく。1.0.1 の時点でエラーは 0 件、警告 11 件（docx の `TextRun` の `bold` などを `String.prototype.bold` と取り違える誤検出、core のタイマー、設定画面の宣言的 API への移行）
+自動レビューの前に `npm run lint`（公式の ESLint プラグイン `eslint-plugin-obsidianmd` の推奨設定、`eslint.config.mjs`）で `src/` を検査しておく。1.0.2 の時点でエラーは 0 件、警告 8 件（docx の `TextRun` の `bold` などを `String.prototype.bold` と取り違える誤検出、設定画面の宣言的 API への移行）。
+
+自動レビューは ESLint のほかに、本番ビルドの main.js を静的に調べる（script 要素を作る、`eval`・`new Function`、`main.js`・`manifest.json` の文字列と ZIP の展開とファイルの書き込みの組み合わせ、など）。リリースの前に本番ビルドで次の文字列が 0 件であることを確かめる: `createElement("script")`・`new Function`・`manifest.json`・`main.js`（`grep -o -F '<文字列>' main.js | wc -l`）。exceljs の同梱ビルドの該当箇所は `scripts/patch-exceljs.mjs` がビルド時に取り除く
 
 ## フェーズ 0 の手動確認（完了条件 B1〜B4）
 
