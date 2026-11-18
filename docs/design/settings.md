@@ -1,7 +1,7 @@
 # 設定の一覧
 
 最終更新: 2026-11-18
-段階: フェーズ 0 で作成（G5・完了条件 E1）。実装済みは `outputRoot` だけで、ほかは各フェーズで実装する
+段階: フェーズ 0 で作成（G5・完了条件 E1）。「実装」が 0 と 1 の項目はフェーズ 1 までに実装する。既定値はフェーズ 1 の決定事項（requirements.md）を反映済み
 
 - 設定値は `data.json` に保存する。型と既定値の実装は `src/core/settings.ts`、画面は `src/obsidian/settings-tab.ts`
 - キーは英語の camelCase。表示名は i18n のリソース（`src/i18n/`）に置く
@@ -14,12 +14,12 @@
 | キー | 値 | 既定値 | 要件 | 実装 |
 |---|---|---|---|---|
 | `outputLocation` | `vault` / `external` | `vault` | G4 | 1 |
-| `outputRoot` | Vault 内のフォルダのパス | `_export` | G4, R8 | 0（実装済み） |
+| `outputRoot` | Vault 内のフォルダのパス | `_export` | G4, R8 | 0 |
 | `externalOutputRoot` | Vault 外の絶対パス | 空（未設定） | G4 | 1 |
-| `saveMode` | `mirror`（ミラー出力）/ `sameFolder`（同一フォルダ） | 未決（R1 は選択肢だけを定める） | R1, R8 | 1 |
+| `saveMode` | `mirror`（ミラー出力）/ `sameFolder`（同一フォルダ） | `mirror` | R1, R8 | 1 |
 | `defaultFormat` | `word` / `excel` / `both` | `word` | R8 | 1 |
-| `onConflict` | `overwrite` / `skip` / `rename`（連番） | 未決 | R3 | 1 |
-| `onError` | `continue` / `failFast` | 未決 | R3 | 1 |
+| `onConflict` | `overwrite` / `skip` / `rename`（連番） | `overwrite` | R3 | 1 |
+| `onError` | `continue` / `failFast` | `continue` | R3 | 1 |
 | `timeoutSeconds` | 正の整数（秒） | `30` | R3 | 1 |
 | `saveImageFiles` | 真偽値（変換時に画像ファイルも保存する） | `false` | R8 | 1 |
 | `authorName` | 文字列（文書プロパティの作成者名） | 空 | C-8, D-5 | 2 |
@@ -29,7 +29,7 @@
 | キー | 値 | 既定値 | 要件 | 実装 |
 |---|---|---|---|---|
 | `includeGlobs` | glob パターンの配列 | 空（すべて含める） | R2 | 1 |
-| `excludeGlobs` | glob パターンの配列 | 未決（要件の例: `Templates/**`、`*.excalidraw.md`） | R2 | 1 |
+| `excludeGlobs` | glob パターンの配列 | `["**/*.excalidraw.md"]` | R2 | 1 |
 
 frontmatter の `export: false` による除外は常に有効で、設定は持たない（R2）。
 
@@ -37,7 +37,7 @@ frontmatter の `export: false` による除外は常に有効で、設定は持
 
 | キー | 値 | 既定値 | 要件 | 実装 |
 |---|---|---|---|---|
-| `mermaidImageFormat` | `svg` / `png` / `both`（画像ファイルとして保存する形式） | 未決 | R1 | 1 |
+| `mermaidImageFormat` | `svg` / `png` / `both`（画像ファイルとして保存する形式） | `png` | R1 | 1 |
 | `pngDpi` | 正の整数 | `192` | R4 | 1 |
 | `pngTransparentBackground` | 真偽値 | `false` | R4 | 1 |
 | `mermaidFontFamily` | CSS の font-family | `"Yu Gothic", "YuGothic", "Hiragino Sans", "Meiryo", sans-serif` | R4 | 1 |

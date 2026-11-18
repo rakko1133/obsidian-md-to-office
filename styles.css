@@ -1,0 +1,22 @@
+/* Batch Office Export: 確認画面の一覧 */
+.batch-office-export-tree {
+	max-height: 50vh;
+	overflow-y: auto;
+	margin-bottom: var(--size-4-3);
+}
+
+.batch-office-export-tree ul {
+	margin: var(--size-4-1) 0;
+	padding-left: var(--size-4-6);
+}
+
+.batch-office-export-note-summary {
+	color: var(--text-muted);
+	font-size: var(--font-ui-smaller);
+}
+
+.batch-office-export-tree details {
+	margin-left: var(--size-4-6);
+	font-size: var(--font-ui-smaller);
+	color: var(--text-muted);
+}

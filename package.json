@@ -1,6 +1,6 @@
 {
   "name": "batch-office-export",
-  "version": "0.0.1",
+  "version": "0.1.0",
   "description": "Batch-convert notes to Word (.docx) and Excel (.xlsx), with Mermaid diagrams as images.",
   "private": true,
   "license": "UNLICENSED",
@@ -15,10 +15,15 @@
   },
   "dependencies": {
     "docx": "^9.15.4",
-    "exceljs": "^4.4.0"
+    "exceljs": "^4.4.0",
+    "picomatch": "^4.0.7",
+    "remark-parse": "^11.0.0",
+    "unified": "^11.0.5"
   },
   "devDependencies": {
+    "@types/mdast": "^4.0.4",
     "@types/node": "^22.20.5",
+    "@types/picomatch": "^4.0.3",
     "esbuild": "^0.28.2",
     "jszip": "^3.10.2",
     "obsidian": "^1.14.4",
