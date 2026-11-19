@@ -10,7 +10,7 @@ import { pdfLinkHref, postprocessPdf } from "../core/pdf-postprocess";
 import type { OutputRef, Warning } from "../core/types";
 import { isRenderableLanguage, waitForQuiet } from "./plugin-render";
 import { timed } from "../core/profile";
-import { noteTiming } from "../core/render-wait";
+import { mayRenderLaterDeep, timingFor, type EmbedReader } from "../core/render-wait";
 
 const ROOT_CLASS = "batch-office-export-pdf-root";
 const CHAPTER_CLASS = "batch-office-export-pdf-chapter";
@@ -116,7 +116,7 @@ async function printNow(app: App, job: PdfPrintJob): Promise<PdfPrintResult> {
 			const markdown = await app.vault.cachedRead(file);
 			await timed("pdf/markdownRender", () => MarkdownRenderer.render(app, markdown, body, chapter.notePath, component));
 			try {
-				const timing = noteTiming(markdown, (lang) => isRenderableLanguage(app, lang));
+				const timing = timingFor(await mayRenderLaterDeep(chapter.notePath, markdown, (lang) => isRenderableLanguage(app, lang), embedReader(app)));
 				await timed("pdf/waitForQuiet", () => waitForQuiet(body, timing, job.signal, "pdf/waitForQuiet"));
 			} catch (error) {
 				throwIfAborted(job.signal);
@@ -286,4 +286,14 @@ async function waitForImages(el: HTMLElement): Promise<void> {
 	const limit = new Promise<void>((resolve) => (timer = window.setTimeout(resolve, IMAGE_WAIT_MS)));
 	await Promise.race([loaded, limit]);
 	window.clearTimeout(timer);
+}
+
+/** 埋め込みのリンク先を読む（描画の完了待ちの判定: src/core/render-wait.ts）。 */
+function embedReader(app: App): EmbedReader {
+	return async (link, fromPath) => {
+		const file = app.metadataCache.getFirstLinkpathDest(link, fromPath);
+		if (!file) return "missing";
+		if (file.extension !== "md") return "other";
+		return { path: file.path, markdown: await app.vault.cachedRead(file) };
+	};
 }

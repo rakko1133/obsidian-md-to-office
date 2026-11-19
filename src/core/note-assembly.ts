@@ -370,53 +370,109 @@ export function extractSection(tree: Root, subpath: string): RootContent[] | nul
 // ---------------------------------------------------------------------------
 // 他のプラグインの描画（A-24・A-26・フェーズ 3b）
 
-/** コードブロックを、Obsidian に描画させた結果に置き換える。描画できなければ原文のまま残して警告する。 */
+/** 同時に描画を頼むコードブロックの数の上限（ノート 1 件の中） */
+const PLUGIN_RENDER_CONCURRENCY = 8;
+
+type BlockOutcome = { kind: "keep"; missing?: string } | { kind: "render"; lang: string; source: string; result: Promise<{ nodes: RootContent[] | null; reason: string }> };
+
+/**
+ * コードブロックを、Obsidian に描画させた結果に置き換える。描画できなければ原文のまま残して警告する。
+ * 描画の完了待ち（DOM の変化が止まるまで）は時間の大半が待ちなので、ノートの中のコードブロックは同時に描画を頼む
+ * （上限 PLUGIN_RENDER_CONCURRENCY）。置き換えと警告は文書の順に行う。
+ */
 async function renderPluginBlocks(tree: Root, rootPath: string, state: State): Promise<void> {
 	const { env } = state;
-	const visit = async (parent: Parent): Promise<void> => {
-		const next: RootContent[] = [];
+	const outcomes = new Map<RootContent, BlockOutcome>();
+	const limit = concurrencyLimit(PLUGIN_RENDER_CONCURRENCY);
+	// 1. 対象を集め、描画を頼む（頼んだ順に始まる）
+	const collect = (parent: Parent): void => {
 		for (const child of parent.children) {
 			if (child.type !== "code" || !child.lang) {
-				if ("children" in child) await visit(child);
-				next.push(child);
+				if ("children" in child) collect(child);
 				continue;
 			}
 			const lang = child.lang.toLowerCase();
-			if (lang === "mermaid") {
-				next.push(child);
-				continue;
-			}
+			if (lang === "mermaid") continue;
 			const renderable = env.renderableLanguage?.(lang) ?? false;
 			if (!renderable || !env.renderBlock) {
-				if (DATAVIEW_LANGUAGES.has(lang)) state.warnings.push({ code: "pluginMissing", detail: lang });
+				outcomes.set(child, { kind: "keep", ...(DATAVIEW_LANGUAGES.has(lang) ? { missing: lang } : {}) });
+				continue;
+			}
+			const renderBlock = env.renderBlock;
+			const source = child.data?.sourcePath ?? rootPath;
+			const value = child.value;
+			const result = limit(async () => {
+				try {
+					return { nodes: await renderBlock(lang, value, source, state.options.signal), reason: "empty" };
+				} catch (error) {
+					if (state.options.signal?.aborted) throw error;
+					return { nodes: null, reason: error instanceof Error ? error.message : String(error) };
+				}
+			});
+			// 待つのは 2. で文書の順に。先に失敗したものが未処理の reject にならないようにする
+			result.catch(() => undefined);
+			outcomes.set(child, { kind: "render", lang, source, result });
+		}
+	};
+	collect(tree);
+	if (outcomes.size === 0) return;
+	// 中断のときは、ほかの描画が終わるのを待ってから投げる（画面の外の要素の後片付けのため）
+	const all = await Promise.allSettled([...outcomes.values()].map((o) => (o.kind === "render" ? o.result : Promise.resolve())));
+	const rejected = all.find((r): r is PromiseRejectedResult => r.status === "rejected");
+	if (rejected) throw rejected.reason;
+
+	// 2. 文書の順に置き換える
+	const apply = async (parent: Parent): Promise<void> => {
+		const next: RootContent[] = [];
+		for (const child of parent.children) {
+			const outcome = outcomes.get(child);
+			if (!outcome) {
+				if ("children" in child) await apply(child);
 				next.push(child);
 				continue;
 			}
-			const source = child.data?.sourcePath ?? rootPath;
-			let nodes: RootContent[] | null = null;
-			let reason = "empty";
-			try {
-				nodes = await env.renderBlock(lang, child.value, source, state.options.signal);
-			} catch (error) {
-				if (state.options.signal?.aborted) throw error;
-				reason = error instanceof Error ? error.message : String(error);
+			if (outcome.kind === "keep") {
+				if (outcome.missing) state.warnings.push({ code: "pluginMissing", detail: outcome.missing });
+				next.push(child);
+				continue;
 			}
+			const { nodes, reason } = await outcome.result;
 			if (!nodes || nodes.length === 0) {
-				state.warnings.push({ code: "renderFailed", detail: `${lang}: ${reason}` });
+				state.warnings.push({ code: "renderFailed", detail: `${outcome.lang}: ${reason}` });
 				next.push(child);
 				continue;
 			}
 			// 取り込んだ内部リンクは、そのコードブロックがあったノートから解決する
 			for (const node of nodes) {
 				walkAll(node, (n) => {
-					if (n.type === "wikiLink") n.data = { ...n.data, sourcePath: source };
+					if (n.type === "wikiLink") n.data = { ...n.data, sourcePath: outcome.source };
 				});
 			}
 			next.push(...nodes);
 		}
 		parent.children = next;
 	};
-	await visit(tree);
+	await apply(tree);
+}
+
+/** 同時に実行する数を上限で抑える。 */
+function concurrencyLimit(max: number): <T>(task: () => Promise<T>) => Promise<T> {
+	let running = 0;
+	const queue: (() => void)[] = [];
+	return (task) =>
+		new Promise((resolve, reject) => {
+			const run = () => {
+				running++;
+				task()
+					.then(resolve, reject)
+					.finally(() => {
+						running--;
+						queue.shift()?.();
+					});
+			};
+			if (running < max) run();
+			else queue.push(run);
+		});
 }
 
 // ---------------------------------------------------------------------------
