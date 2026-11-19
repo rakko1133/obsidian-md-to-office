@@ -1,6 +1,6 @@
 # 依存ライブラリとライセンス
 
-最終更新: 2026-11-18（フェーズ 0 で作成、フェーズ 1・2・3b と数式の画像化（mathjax-full）で追加した依存を反映。フェーズ 6 でライセンス文の同梱を追加）
+最終更新: 2026-11-19（PDF 出力の後処理の pdf-lib を追加。フェーズ 0 で作成、フェーズ 1・2・3b と数式の画像化（mathjax-full）で追加した依存を反映。フェーズ 6 でライセンス文の同梱を追加）
 
 G1 の条件: 配布物に含めるライブラリは、再配布できるライセンス（MIT / Apache-2.0 等）に限る。依存を足すたびにこの表を更新し、コミットの本文にライセンスを書く（`docs/process/git-rules.md` の 3 章）。
 
@@ -17,10 +17,12 @@ G1 の条件: 配布物に含めるライブラリは、再配布できるライ
 | `remark-math` | 6.0.0 | MIT | 数式 `$…$`・`$$…$$` の構文解析（フェーズ 3b）。LaTeX → Word の数式は `docx` の `docx/math`（`latexToMath`）で行う | R5 |
 | `picomatch` | 4.0.7 | MIT | glob の判定（R2）。extglob の ReDoS（GHSA-fc5q-39xc-vjpf、修正版なし）を避けるため `noextglob: true` で使う（1.0.2） | R2 |
 | `fflate` | 0.8.3 | MIT | Word のテンプレート（.docx / .dotx）から styles.xml を取り出す、見出しの番号の定義を直す（C-1b・C-1c）。`docx` の依存としてすでに main.js に含まれていたもので、直接の依存にしてもサイズは増えない（ユーザー承認・2026-11-18） | R6 |
+| `pdf-lib` | 1.17.1 | MIT | PDF 出力（H1-PDF）の後処理。printToPDF で作った PDF に表紙を差し込み、別の PDF へのリンクを書き換え、作成者などの文書プロパティを入れる（ユーザー承認・2026-11-19）。間接的な依存は `@pdf-lib/standard-fonts`・`@pdf-lib/upng`（MIT）、`pako` 1.0.11（MIT AND Zlib）、`tslib` 1.14.1（0BSD）。最終の公開は 2021 年で更新が止まっている。main.js が約 0.43 MB 増える（esbuild の tree shaking では取り除けず、呼び出す側が開発用ビルドだけの間も本番に入る） | H1 |
 | `mathjax-full` | 3.2.2 | Apache-2.0 | `latexToMath` で Word の数式にできない式を SVG にする（A-11 の代替）。Obsidian 同梱の MathJax は SVG を作れないため同梱する。main.js が約 1.7 MB 増える（大半は SVG 出力の TeX フォントの字形データ） | R5 |
 
-上の 8 パッケージ自身と、そこから辿れる間接的な依存（計 265 件、`node_modules` 上で確認・フェーズ 3b 時点）のライセンスは次のとおり。いずれも G1 の条件を満たす。
+上の 8 パッケージ（pdf-lib を除く）自身と、そこから辿れる間接的な依存（計 265 件、`node_modules` 上で確認・フェーズ 3b 時点）のライセンスは次のとおり。いずれも G1 の条件を満たす。
 
+- pdf-lib で増えたのは `pdf-lib`・`@pdf-lib/standard-fonts`・`@pdf-lib/upng`（以上 MIT）、`pako` 1.0.11（MIT AND Zlib）、`tslib` 1.14.1（0BSD）の 5 件（2026-11-19）。`npm audit --omit=dev` でこれらへの指摘はない。`THIRD_PARTY_NOTICES.md` は 82 件になった。下の件数の表はフェーズ 3b 時点のまま
 - 数式の画像化で増えたのは `mathjax-full`・`mhchemparser`・`mj-context-menu`・`speech-rule-engine`（以上 Apache-2.0）、`esm`・`commander` 8.3.0・`wicked-good-xpath`・`@xmldom/xmldom`（以上 MIT）の 8 件。main.js に入るのは `mathjax-full` と `mhchemparser`（化学式 `\ce` 用）だけで、残りは MathJax の読み上げ・メニュー用なので使わない（main.js に `speech-rule-engine` の文字列がない）。下の件数の表はフェーズ 3b 時点のまま
 - 配布物へのライセンス文の同梱（フェーズ 6 で対応）: Apache-2.0 と MIT は、ライセンス文と著作権表示を配布物に添えることを求める。main.js は圧縮で各ファイルの著作権表示が消えるので、`npm run notices`（`scripts/third-party-notices.mjs`）で main.js に入るパッケージ（2026-11-18 時点 77 件。`docx` と `exceljs` が自分のビルドに埋め込んだ依存を含む）のライセンス文を `THIRD_PARTY_NOTICES.md` にまとめ、本番ビルドで main.js の末尾にもコメントで入れる。依存を変えたら `npm run notices` で作り直す（`npm run build` は古いと止まる）。`buffers@0.1.1`（ライセンスの記載なし）は main.js に入らないことを metafile で確かめた
 - フェーズ 3b で増えたのは `remark-math`・`mdast-util-math`・`micromark-extension-math`・`unist-util-remove-position`・`katex`・`commander`・`@types/hast`・`@types/katex` の 8 件（すべて MIT）。`katex` は `micromark-extension-math` の HTML 出力用の依存で、構文解析だけを使う main.js には含まれないことを確かめた（main.js に `katex` の文字列がない）
