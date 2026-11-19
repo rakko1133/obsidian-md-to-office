@@ -7,7 +7,7 @@ import { mocLinks, mocPathOf, orderChapters } from "../core/docx-combine";
 import { mapFrontmatter, valueToText } from "../core/frontmatter";
 import type { MermaidExportDeps } from "../core/mermaid-export";
 import { noteBaseName, refKey } from "../core/output-plan";
-import { pdfConvertedNotes, pdfPageOptions, pdfTargetRef } from "../core/pdf-export";
+import { pdfConvertedNotes, pdfPageOptions, pdfTargetRef, pdfTextCssProps } from "../core/pdf-export";
 import { aggregateStatus } from "../core/run";
 import type { PluginSettings } from "../core/settings";
 import type { FileResult, ManifestSnapshot, NoteResult, OutputRef } from "../core/types";
@@ -74,6 +74,7 @@ export class PdfRun {
 			headerTitle: s.headerTitle,
 			footerPageNumber: s.footerPageNumber,
 			page: pdfPageOptions(s),
+			textCss: pdfTextCssProps(s),
 			lang: this.deps.lang,
 			// 別の PDF になるノート（今回の対象か、記録に PDF として残るノート）だけ、リンク先にする
 			linkTarget: (path) => (this.converted.has(path) ? this.outputOf(path) : null),

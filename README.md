@@ -58,7 +58,7 @@ By default, outputs go to the `_export` folder in your vault, mirroring the fold
 | Mermaid images | SVG / PNG, PNG resolution, transparent background, font, also save diagrams as image files when converting |
 | Word | Paper size, orientation, margins, fonts, file name as title, author name, line breaks, code line numbers, comments, frontmatter table, external images, callout colors, page numbers, header title, cover page, table of contents, combine order, template (.docx / .dotx), heading numbering, page break before heading 1, full-width tables, figure and table captions |
 | Excel | One workbook per folder or per note, one sheet per note or per table, outline mode, Excel tables, source columns |
-| PDF | Paper size, orientation, margins, scale. The cover page, table of contents, header and footer follow the Word settings |
+| PDF | Paper size, orientation, margins, scale, body text size and font, code font. The cover page, table of contents, header and footer follow the Word settings |
 
 ## Notes
 

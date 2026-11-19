@@ -7,6 +7,19 @@ export type OutputFormat = "word" | "excel" | "pdf";
 /** 出力形式の並び（確認画面・設定画面の表示順と、実行の順）。 */
 export const OUTPUT_FORMATS: readonly OutputFormat[] = ["word", "excel", "pdf"];
 
+/**
+ * PDF の本文のフォントの既定値。和文フォントの英数字を使い、和文と英数字の見た目をそろえる。
+ * BIZ UDP ゴシックは Windows 10 から入っている UD（ユニバーサルデザイン）フォント。ほかの OS では後ろの候補を使う。
+ */
+export const PDF_FONT_FAMILY_DEFAULT = '"BIZ UDPGothic", "Hiragino Sans", "Noto Sans CJK JP", "Yu Gothic", Meiryo, sans-serif';
+
+/**
+ * PDF のコードのフォントの既定値。BIZ UD ゴシックは等幅（和文は英数字の 2 文字分）。
+ * Windows 11 の Cascadia Mono などの可変フォントは、PDF に Type3 フォント（ヒンティングのない図形）として入り、
+ * Adobe Acrobat Reader で細くかすれて見えるので使わない。
+ */
+export const PDF_CODE_FONT_FAMILY_DEFAULT = '"BIZ UDGothic", "Osaka-Mono", "Noto Sans Mono CJK JP", Consolas, monospace';
+
 export interface PluginSettings {
 	/** 出力先の場所（G4） */
 	outputLocation: "vault" | "external";
@@ -108,6 +121,12 @@ export interface PluginSettings {
 	pdfMarginsMm: { top: number; bottom: number; left: number; right: number };
 	/** PDF の拡大率（%、10〜200）（H1-PDF） */
 	pdfScale: number;
+	/** PDF の本文のフォント（CSS の font-family）。和文と英数字を同じフォントにする（H1-PDF） */
+	pdfFontFamily: string;
+	/** PDF のコードのフォント（CSS の font-family）。空なら Obsidian のフォント（H1-PDF） */
+	pdfCodeFontFamily: string;
+	/** PDF の本文の文字の大きさ（pt、6〜24、0.5 刻み）（H1-PDF） */
+	pdfFontSizePt: number;
 }
 
 export const DEFAULT_SETTINGS: Readonly<PluginSettings> = {
@@ -162,6 +181,9 @@ export const DEFAULT_SETTINGS: Readonly<PluginSettings> = {
 	pdfOrientation: "portrait",
 	pdfMarginsMm: { top: 25, bottom: 25, left: 25, right: 25 },
 	pdfScale: 100,
+	pdfFontFamily: PDF_FONT_FAMILY_DEFAULT,
+	pdfCodeFontFamily: PDF_CODE_FONT_FAMILY_DEFAULT,
+	pdfFontSizePt: 10.5,
 };
 
 /**
@@ -226,6 +248,10 @@ export function normalizeSettings(raw: unknown): PluginSettings {
 		pdfOrientation: oneOf(data.pdfOrientation, ["portrait", "landscape"], d.pdfOrientation),
 		pdfMarginsMm: margins(data.pdfMarginsMm, d.pdfMarginsMm),
 		pdfScale: typeof data.pdfScale === "number" && Number.isInteger(data.pdfScale) && data.pdfScale >= 10 && data.pdfScale <= 200 ? data.pdfScale : d.pdfScale,
+		pdfFontFamily: typeof data.pdfFontFamily === "string" ? data.pdfFontFamily.trim() : d.pdfFontFamily,
+		pdfCodeFontFamily: typeof data.pdfCodeFontFamily === "string" ? data.pdfCodeFontFamily.trim() : d.pdfCodeFontFamily,
+		pdfFontSizePt:
+			typeof data.pdfFontSizePt === "number" && data.pdfFontSizePt >= 6 && data.pdfFontSizePt <= 24 && Number.isInteger(data.pdfFontSizePt * 2) ? data.pdfFontSizePt : d.pdfFontSizePt,
 	};
 }
 

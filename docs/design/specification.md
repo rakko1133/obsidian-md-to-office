@@ -512,8 +512,13 @@ OS のユーザー名は入れない（単体テストで確認）。
 | 向き | `pdfOrientation` | 縦 |
 | 余白 | `pdfMarginsMm`（上下左右） | 各 25 mm |
 | 拡大率 | `pdfScale`（10〜200 %） | 100 % |
+| 本文の文字の大きさ | `pdfFontSizePt`（6〜24 pt、0.5 刻み） | 10.5 pt |
+| 本文のフォント | `pdfFontFamily`（CSS の font-family。空なら Obsidian のフォント） | BIZ UDP ゴシック ほか |
+| コードのフォント | `pdfCodeFontFamily`（同上） | BIZ UD ゴシック ほか |
 
 - 画像・図はページの境目で切らない。高さの上限を印字領域（用紙の高さ − 上下の余白、拡大率を反映）の 85% にして縮める
+- 余白は設定の余白だけ（読みモードの表示用の余白は印刷では 0）
+- 印字領域に収まらない表は 0.7 倍まで縮小し、それでもはみ出すときは列の最小の幅を外し、さらにセルの中を文字の途中でも折り返す（`src/obsidian/pdf-print.ts` の `fitWideTables`）。コードの長い行は折り返す
 - Mermaid 図の拡大・縮小のボタンは印刷しない
 
 ### 13.4 機能
@@ -652,10 +657,10 @@ OS のユーザー名は入れない（単体テストで確認）。
 | Word の体裁 | `wordTemplatePath`・`headingNumbering`・`pageBreakBeforeH1`・`tableFullWidth`・`figureCaptions`・`tableCaptions` | 空・すべてオフ |
 | Word・PDF 共通 | `coverPage`・`tableOfContents`・`footerPageNumber`・`headerTitle`・`combineOrder`・`defaultCombine` | オフ・`combined`・オン・オフ・`fileName`・オフ |
 | Excel | `excelBookUnit`・`excelSheetUnit`・`excelAsTable`・`excelOutlineMode`・`excelSourceColumns` | `perFolder`・`perNote`・オン・オフ・オフ |
-| PDF | `pdfPaperSize`・`pdfOrientation`・`pdfMarginsMm`・`pdfScale` | A4・縦・各 25 mm・100 |
+| PDF | `pdfPaperSize`・`pdfOrientation`・`pdfMarginsMm`・`pdfScale`・`pdfFontSizePt`・`pdfFontFamily`・`pdfCodeFontFamily` | A4・縦・各 25 mm・100・10.5 pt・BIZ UDP ゴシック・BIZ UD ゴシック |
 
 - 古い設定の移行: 1.0 までの `defaultFormat`（`word` / `excel` / `both`）だけがあれば、`defaultFormats` に移す（`both` → Word と Excel）
-- 余白は 0 以上 100 未満の数値だけを受け付ける。`pdfScale` は 10〜200 の整数
+- 余白は 0 以上 100 未満の数値だけを受け付ける。`pdfScale` は 10〜200 の整数。`pdfFontSizePt` は 6〜24 の 0.5 刻み
 - 設定を持たないもの: Mermaid のテーマ（`neutral` 固定）、`export: false` による除外（常に有効）、画像の配置（行内に固定）
 
 ---

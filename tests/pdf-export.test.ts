@@ -1,5 +1,19 @@
 import { describe, expect, it } from "vitest";
-import { headingKey, headingOfSubpath, pdfConvertedNotes, pdfOutputRef, pdfPageOptions, pdfPrintableHeightPx, pdfRelativePath, pdfTargetRef, planPdfNote } from "../src/core/pdf-export";
+import {
+	MIN_TABLE_ZOOM,
+	headingKey,
+	headingOfSubpath,
+	pdfConvertedNotes,
+	pdfOutputRef,
+	pdfPageOptions,
+	pdfPrintableHeightPx,
+	pdfPrintableWidthPx,
+	pdfRelativePath,
+	pdfTargetRef,
+	pdfTextCssProps,
+	planPdfNote,
+	tableZoom,
+} from "../src/core/pdf-export";
 import { mergeAllResults } from "../src/core/run";
 import { DEFAULT_SETTINGS, normalizeSettings } from "../src/core/settings";
 import type { NoteResult } from "../src/core/types";
@@ -68,6 +82,45 @@ describe("画像・図の最大の高さ", () => {
 	});
 });
 
+describe("印字領域の幅と表の縮小（読みやすさ）", () => {
+	const margins = { top: 25, bottom: 25, left: 20, right: 20 };
+	const base = { pdfPaperSize: "A4" as const, pdfOrientation: "portrait" as const, pdfMarginsMm: margins, pdfScale: 100 };
+
+	it("印字領域の幅（CSS px）は用紙の幅から左右の余白を引く。横向きは用紙の高さ、拡大率で割る", () => {
+		expect(pdfPrintableWidthPx(pdfPageOptions(base))).toBe(Math.floor((170 / 25.4) * 96));
+		expect(pdfPrintableWidthPx(pdfPageOptions({ ...base, pdfOrientation: "landscape" }))).toBe(Math.floor((257 / 25.4) * 96));
+		expect(pdfPrintableWidthPx(pdfPageOptions({ ...base, pdfScale: 50 }))).toBe(Math.floor((170 / 25.4) * 96 * 2));
+	});
+
+	it("収まる表は縮小しない。収まらない表は収まる倍率にし、MIN_TABLE_ZOOM より小さくしない", () => {
+		expect(tableZoom(600, 600)).toBe(1);
+		expect(tableZoom(600.5, 600)).toBe(1);
+		expect(tableZoom(800, 600)).toBe(0.75);
+		expect(tableZoom(5000, 600)).toBe(MIN_TABLE_ZOOM);
+		expect(tableZoom(800, 0)).toBe(1);
+	});
+});
+
+describe("本文の文字の CSS の変数", () => {
+	it("大きさは pt を px にし、フォントは本文とコードの両方に入れる", () => {
+		expect(pdfTextCssProps({ pdfFontFamily: '"BIZ UDPGothic", sans-serif', pdfCodeFontFamily: "Consolas", pdfFontSizePt: 10.5 })).toEqual({
+			"--batch-office-export-pdf-font-size": "14px",
+			"--font-text-size": "14px",
+			"--batch-office-export-pdf-font": '"BIZ UDPGothic", sans-serif',
+			"--font-text": '"BIZ UDPGothic", sans-serif',
+			"--batch-office-export-pdf-code-font": "Consolas",
+			"--font-monospace": "Consolas",
+		});
+	});
+
+	it("フォントが空なら Obsidian のフォントのまま（変数を入れない）", () => {
+		expect(pdfTextCssProps({ pdfFontFamily: "", pdfCodeFontFamily: "", pdfFontSizePt: 9 })).toEqual({
+			"--batch-office-export-pdf-font-size": "12px",
+			"--font-text-size": "12px",
+		});
+	});
+});
+
 describe("リンクの部分パス", () => {
 	it("見出しは最後の要素、ブロック ID と空は null", () => {
 		expect(headingOfSubpath("#見出し")).toBe("見出し");
@@ -96,6 +149,15 @@ describe("設定（H1-PDF）", () => {
 		expect(s.pdfScale).toBe(100);
 		expect(s.pdfMarginsMm.top).toBe(25);
 		expect(normalizeSettings({ pdfPaperSize: "A3", pdfScale: 80 })).toMatchObject({ pdfPaperSize: "A3", pdfScale: 80 });
+	});
+
+	it("PDF の文字: 大きさは 6〜24 の 0.5 刻み、フォントは前後の空白を除き、空も受け付ける", () => {
+		expect(normalizeSettings({})).toMatchObject({ pdfFontSizePt: 10.5 });
+		expect(normalizeSettings({}).pdfFontFamily).toContain("BIZ UDPGothic");
+		expect(normalizeSettings({}).pdfCodeFontFamily).toContain("BIZ UDGothic");
+		expect(normalizeSettings({ pdfFontSizePt: 12.5 }).pdfFontSizePt).toBe(12.5);
+		for (const bad of [5.5, 25, 10.3, "11", Number.NaN]) expect(normalizeSettings({ pdfFontSizePt: bad }).pdfFontSizePt).toBe(10.5);
+		expect(normalizeSettings({ pdfFontFamily: "  Meiryo  ", pdfCodeFontFamily: "" })).toMatchObject({ pdfFontFamily: "Meiryo", pdfCodeFontFamily: "" });
 	});
 });
 

@@ -47,7 +47,8 @@
 		position: fixed;
 		left: -10000px;
 		top: 0;
-		width: 800px;
+		/* 印字領域の幅（src/obsidian/pdf-print.ts が決める）。表の幅を印刷のときと同じ条件で測る */
+		width: var(--batch-office-export-pdf-width, 800px);
 		visibility: hidden;
 		pointer-events: none;
 	}
@@ -117,4 +118,64 @@
 /* 見出しだけがページの下に残らないよう、次の要素と同じページにする */
 .batch-office-export-pdf-root :is(h1, h2, h3, h4, h5, h6) {
 	break-after: avoid;
+}
+
+/* 読みやすさ（H1-PDF・2026-11-19）
+   - 余白は設定の余白（printToPDF の margins）だけにする。読みモードの表示用の余白（padding）を印刷では 0 にする
+   - 表とコードは印字領域の幅で折り返す。列の多い表や長い行が、ページの右端で切れないようにする */
+/* 本文の一番外側だけ（表紙と、埋め込んだノートの中の .markdown-preview-view は除く） */
+.print.batch-office-export-pdf-root > .markdown-preview-view:not(.batch-office-export-pdf-cover) {
+	padding: 0;
+	font-size: var(--batch-office-export-pdf-font-size, var(--font-text-size));
+	font-family: var(--batch-office-export-pdf-font, var(--font-text));
+}
+
+.print.batch-office-export-pdf-root :is(code, pre, kbd) {
+	font-family: var(--batch-office-export-pdf-code-font, var(--font-monospace));
+}
+
+.print.batch-office-export-pdf-root :is(.batch-office-export-pdf-first, .batch-office-export-pdf-first > :first-child) {
+	margin-top: 0;
+}
+
+/* 表: 文字の大きさを本文にそろえる（Obsidian は表の文字の大きさを別の変数で持つ）。
+   収まらない表は pdf-print.ts が zoom で縮小するので、ここでは切らない（overflow: visible） */
+.print.batch-office-export-pdf-root :is(table, th, td) {
+	font-size: var(--batch-office-export-pdf-font-size, inherit);
+}
+
+.batch-office-export-pdf-root :is(.table-wrapper, .el-table) {
+	overflow: visible;
+}
+
+/* セルの中のリンク（URL）は区切りがないので、どこでも折り返す。数値や日付は途中で折り返さない */
+.batch-office-export-pdf-root :is(th, td) :is(a, code) {
+	overflow-wrap: anywhere;
+}
+
+/* 表を折り返さずに並べたときの幅を測る（pdf-print.ts が一瞬だけ付ける） */
+.batch-office-export-pdf-root table.batch-office-export-pdf-measure {
+	width: max-content;
+}
+
+/* 縮小しても収まらない表（pdf-print.ts が付ける）: 列の最小の幅を外す */
+.batch-office-export-pdf-root table.batch-office-export-pdf-compact-table :is(th, td) {
+	min-width: 0;
+}
+
+/* それでも収まらない表（pdf-print.ts が付ける）: セルの中を文字の途中でも折り返す */
+.batch-office-export-pdf-root table.batch-office-export-pdf-wrap-anywhere :is(th, td) {
+	overflow-wrap: anywhere;
+}
+
+/* コード: 長い行は印字領域の幅で折り返す */
+.batch-office-export-pdf-root pre,
+.batch-office-export-pdf-root pre code {
+	white-space: pre-wrap;
+	overflow-wrap: anywhere;
+	overflow: visible;
+}
+
+.batch-office-export-pdf-root :not(pre) > code {
+	overflow-wrap: anywhere;
 }
