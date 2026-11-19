@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { headingKey, headingOfSubpath, pdfConvertedNotes, pdfOutputRef, pdfPageOptions, pdfRelativePath, pdfTargetRef, planPdfNote } from "../src/core/pdf-export";
+import { headingKey, headingOfSubpath, pdfConvertedNotes, pdfOutputRef, pdfPageOptions, pdfPrintableHeightPx, pdfRelativePath, pdfTargetRef, planPdfNote } from "../src/core/pdf-export";
 import { mergeAllResults } from "../src/core/run";
 import { DEFAULT_SETTINGS, normalizeSettings } from "../src/core/settings";
 import type { NoteResult } from "../src/core/types";
@@ -48,6 +48,23 @@ describe("PDF のページ設定", () => {
 		expect(page.landscape).toBe(true);
 		expect(page.scale).toBe(1.5);
 		expect(page.margins).toEqual({ top: 1, bottom: 0, left: 0.5, right: 2 });
+	});
+});
+
+describe("画像・図の最大の高さ", () => {
+	const margins = { top: 25, bottom: 25, left: 20, right: 20 };
+	const base = { pdfPaperSize: "A4" as const, pdfOrientation: "portrait" as const, pdfMarginsMm: margins, pdfScale: 100 };
+
+	it("印字領域の高さ（CSS px）の 85%", () => {
+		// A4 縦: (297 - 50) mm = 247 mm → 247 / 25.4 × 96 ≒ 933.5 px
+		expect(pdfPrintableHeightPx(pdfPageOptions(base))).toBe(Math.floor(((247 / 25.4) * 96) * 0.85));
+	});
+
+	it("横向きは用紙の幅、拡大率で割る", () => {
+		const landscape = pdfPrintableHeightPx(pdfPageOptions({ ...base, pdfOrientation: "landscape" }));
+		expect(landscape).toBe(Math.floor(((160 / 25.4) * 96) * 0.85));
+		const half = pdfPrintableHeightPx(pdfPageOptions({ ...base, pdfScale: 50 }));
+		expect(half).toBe(Math.floor(((247 / 25.4) * 96 * 2) * 0.85));
 	});
 });
 
