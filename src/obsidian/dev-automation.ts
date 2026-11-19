@@ -8,6 +8,7 @@ import { TFolder, type TAbstractFile } from "obsidian";
 import type { PluginSettings } from "../core/settings";
 import type BatchOfficeExportPlugin from "../main";
 import { runExport, type ExportMode } from "./export-runner";
+import { inspectSettingTab, type SettingAction } from "./dev-settings";
 
 const POLL_MS = 1000;
 const REQUEST_FILE = "dev-request.json";
@@ -16,7 +17,8 @@ const STATUS_FILE = "dev-status.json";
 
 interface DevRequest {
 	id: string;
-	mode: ExportMode;
+	/** "settings" は変換せずに設定画面を開いて中身を書き出す（dev-settings.ts） */
+	mode: ExportMode | "settings";
 	/** Vault からの相対パス（ファイルかフォルダ）。空文字は Vault 全体 */
 	paths: string[];
 	/** この実行だけに使う設定の上書き */
@@ -29,6 +31,8 @@ interface DevRequest {
 	select?: string[];
 	/** 確認画面に出す予定（ドライラン）を結果に付ける */
 	plans?: boolean;
+	/** mode が "settings" のとき、設定画面で順に行う操作 */
+	actions?: SettingAction[];
 }
 
 export function registerDevAutomation(plugin: BatchOfficeExportPlugin, pluginDir: string): void {
@@ -76,6 +80,7 @@ export function registerDevAutomation(plugin: BatchOfficeExportPlugin, pluginDir
 	}
 
 	async function run(request: DevRequest): Promise<Record<string, unknown>> {
+		if (request.mode === "settings") return inspectSettingTab(plugin, request.actions ?? []);
 		const vault = plugin.app.vault;
 		const items: TAbstractFile[] = [];
 		const missing: string[] = [];

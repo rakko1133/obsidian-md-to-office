@@ -9,6 +9,12 @@
 // 値は JSON として読めればその値、読めなければ文字列）、--timeout 秒（既定 300）、--json（結果をそのまま出す）、
 // --profile（処理時間を計測して、段ごとの表を出す。docs/process/development.md の「処理時間の計測」）、
 // --select（複数可。確認画面でチェックを残すノートの Vault 内パス。省略するとすべて）、--plans（確認画面に出す予定を表示して、実際の出力と比べる）
+//
+//   node scripts/obsidian-run.mjs --mode settings                                   # 設定画面を開いて、行・入力欄の値を JSON で出す
+//   node scripts/obsidian-run.mjs --mode settings --action "出力先=external" --action "余白:2=30"
+//
+// --mode settings は変換をしない。--action「行の名前[#同名の何番目][:入力欄の番号]=値」（複数可）で入力欄に値を入れ、
+// 保存された設定と表示される行を記録する。終わると設定を元に戻す（src/obsidian/dev-settings.ts）
 import { existsSync, readFileSync, statSync, unlinkSync, writeFileSync } from "node:fs";
 import { join } from "node:path";
 import { randomUUID } from "node:crypto";
@@ -19,7 +25,7 @@ const RESULT = join(PLUGIN_DIR, "dev-result.json");
 const STATUS = join(PLUGIN_DIR, "dev-status.json");
 
 const args = process.argv.slice(2);
-const opts = { mode: "docx", paths: [], settings: {}, timeout: 300, json: false, waitReload: false, combine: false, profile: false, select: [], plans: false };
+const opts = { mode: "docx", paths: [], settings: {}, timeout: 300, json: false, waitReload: false, combine: false, profile: false, select: [], plans: false, actions: [] };
 for (let i = 0; i < args.length; i++) {
 	const a = args[i];
 	if (a === "--mode") opts.mode = args[++i];
@@ -38,6 +44,14 @@ for (let i = 0; i < args.length; i++) {
 	else if (a === "--profile") opts.profile = true;
 	else if (a === "--select") opts.select.push(args[++i] ?? "");
 	else if (a === "--plans") opts.plans = true;
+	else if (a === "--action") {
+		const spec = args[++i] ?? "";
+		const eq = spec.lastIndexOf("=");
+		const m = /^(.*?)(?:#(\d+))?(?::(\d+))?$/.exec(spec.slice(0, eq));
+		const raw = spec.slice(eq + 1);
+		const value = raw === "true" ? true : raw === "false" ? false : raw;
+		opts.actions.push({ row: m[1], ...(m[2] ? { nth: Number(m[2]) } : {}), ...(m[3] ? { control: Number(m[3]) } : {}), value });
+	}
 	else if (a === "--wait-reload") opts.waitReload = true;
 	else {
 		console.error(`unknown option: ${a}`);
@@ -70,14 +84,15 @@ if (opts.waitReload) {
 	console.log(`reloaded: ${status.loadedAt} (version ${status.version})`);
 	process.exit(0);
 }
-if (opts.paths.length === 0) {
+if (opts.mode === "settings") opts.json = true;
+else if (opts.paths.length === 0) {
 	console.error("--path is required (use --path \"\" for the whole vault)");
 	process.exit(2);
 }
 
 const id = randomUUID();
 if (existsSync(RESULT)) unlinkSync(RESULT);
-writeFileSync(REQUEST, JSON.stringify({ id, mode: opts.mode, paths: opts.paths, settings: opts.settings, combine: opts.combine, profile: opts.profile, ...(opts.select.length > 0 ? { select: opts.select } : {}), plans: opts.plans }, null, "\t"));
+writeFileSync(REQUEST, JSON.stringify({ id, mode: opts.mode, paths: opts.paths, actions: opts.actions, settings: opts.settings, combine: opts.combine, profile: opts.profile, ...(opts.select.length > 0 ? { select: opts.select } : {}), plans: opts.plans }, null, "\t"));
 
 let result = null;
 while (Date.now() < deadline) {
@@ -116,7 +131,7 @@ if (opts.json) {
 	if (result.plans) printPlans(result.plans, files);
 	if (result.profile) printProfile(result.profile);
 }
-process.exit(result.error || result.results?.some((r) => r.status === "failed") ? 1 : 0);
+process.exit(result.error || result.steps?.some((s) => s.error) || result.results?.some((r) => r.status === "failed") ? 1 : 0);
 
 /** 確認画面の予定と、実際に書き込んだ出力を比べる。予定にない出力・出力されなかった予定を「食い違い」として出す。 */
 function printPlans(plans, files) {
