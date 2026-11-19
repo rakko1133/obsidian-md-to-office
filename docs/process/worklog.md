@@ -8,6 +8,14 @@
 
 ---
 
+## 2026-11-19 PDF 出力の試作（H1-PDF）
+
+- 作ったもの: `src/obsidian/pdf-prototype.ts`（開発用ビルドだけ）。開発用の自動実行に `--mode pdf` を足した。作業ブランチは `feat/pdf-prototype`
+- 確かめたこと: Obsidian 本体の印刷と同じ作り（`body` 直下の `.print` に読みモードの HTML を描き、`remote` の `webContents.printToPDF()` を呼ぶ）で PDF を作れた。数式・Dataview・Mermaid・画像・コールアウトは表示どおり、しおり・PDF 内リンク・目次・ヘッダー・フッターのページ番号・タイトルも入った
+- できなかったこと: 表紙だけヘッダー・フッターを外す（CSS の `@page :first` では消えない）、別の PDF への相対リンク（`app://obsidian.md/...` になる）、作成者の書き込み。PDF を後から書き換えるライブラリ（`pdf-lib` など）を足すかどうかをユーザーに確認する
+- 公式の ESLint の推奨設定では `electron` の利用は指摘されず、実行時の `<style>` 要素だけがエラーになった。CSS は `styles.css` に移した
+- 確認: 型チェック・`npm run lint`（エラー 0、警告 8 は以前のまま）・単体テスト 265 件
+
 ## 2026-11-19 PDF 出力の仕様を決定（H1-PDF）
 
 - `docs/requirements.md` に「H1-PDF. PDF 出力の仕様」を追加した。未実装

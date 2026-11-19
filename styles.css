@@ -39,3 +39,23 @@
 .batch-office-export-callout-probe {
 	color: var(--callout-color);
 }
+
+/* PDF 出力の試作（H1-PDF）: Obsidian の印刷用の .print の中だけに効く */
+.print .batch-office-export-pdf-chapter + .batch-office-export-pdf-chapter {
+	break-before: page;
+}
+
+.print .batch-office-export-pdf-toc {
+	break-after: page;
+}
+
+.print .batch-office-export-pdf-cover {
+	padding-top: 35vh;
+	text-align: center;
+	break-after: page;
+}
+
+.print .batch-office-export-pdf-cover h1 {
+	font-size: 2.4em;
+	border: none;
+}
