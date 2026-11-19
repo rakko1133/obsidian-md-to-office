@@ -52,7 +52,10 @@
 .print .batch-office-export-pdf-cover {
 	padding-top: 35vh;
 	text-align: center;
-	break-after: page;
+}
+
+.print .batch-office-export-pdf-hidden {
+	display: none;
 }
 
 .print .batch-office-export-pdf-cover h1 {
