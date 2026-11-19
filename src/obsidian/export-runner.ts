@@ -73,8 +73,11 @@ interface ModeContext {
 	vault: VaultEnvironment;
 	/** 今回の実行の対象（確認画面で選んだノート）。内部リンクの変換対象の範囲（A-18） */
 	selected: ReadonlySet<string>;
-	/** 確認画面に出す候補の件数（ドライランでの Excel の出力単位の判定: R8） */
-	targetCount: number;
+	/**
+	 * 実行するノートの件数（確認画面でチェックが残っている件数）。Excel の出力単位を決める（R8: 1 件なら {ノート名}.xlsx）。
+	 * 実行時（XlsxRun）と同じ件数でドライランしないと、確認画面の出力名と実際の出力が食い違う
+	 */
+	selectedCount: number;
 	/** Excel のブックの状態（確認画面の後に作る） */
 	xlsx?: XlsxRun;
 	/** Vault 全体の集計の状態（A-34） */
@@ -146,8 +149,8 @@ const MODES: Record<Exclude<ExportMode, "office" | "both">, ModeDefinition> = {
 	},
 	xlsx: {
 		title: () => t("confirm.titleExcel"),
-		plan: ({ settings, deps, vault, targetCount }, path) =>
-			planXlsxNote(path, xlsxUnit(targetCount, settings), settings, vault.vaultName, (ref: OutputRef) => deps.writer.exists(ref)),
+		plan: ({ settings, deps, vault, selectedCount }, path) =>
+			planXlsxNote(path, xlsxUnit(selectedCount, settings), settings, vault.vaultName, (ref: OutputRef) => deps.writer.exists(ref)),
 		start: (ctx, selected) => {
 			ctx.xlsx = new XlsxRun(ctx.settings, selected, { readNote: ctx.deps.readNote, writer: ctx.deps.writer, vault: ctx.vault, labels: xlsxLabels() });
 		},
@@ -348,7 +351,7 @@ export async function runExport(host: ExportHost, mode: ExportMode, source: Targ
 			deps: { readNote, renderer, cache, writer },
 			vault: await timed("run/vaultEnv", () => createVaultEnvironment(app)),
 			selected: new Set(),
-			targetCount: targets.length,
+			selectedCount: targets.length,
 			combine: auto ? (auto.combine ?? false) : settings.defaultCombine,
 		};
 
@@ -368,14 +371,15 @@ export async function runExport(host: ExportHost, mode: ExportMode, source: Targ
 					targets,
 					excludedCount: excluded.length,
 					outputLabel,
-					plan: (path) => definition.plan(ctx, path),
+					plan: (path, selectedCount) => definition.plan({ ...ctx, selectedCount }, path),
 					...(initialFormats
 						? {
 								formats: {
 									initial: initialFormats,
 									combine: settings.defaultCombine,
 									title: (chosen: readonly OutputFormat[]) => definitionFor(chosen).title(),
-									plan: (chosen: readonly OutputFormat[], combine: boolean, path: string) => definitionFor(chosen).plan({ ...ctx, combine }, path),
+									plan: (chosen: readonly OutputFormat[], combine: boolean, path: string, selectedCount: number) =>
+										definitionFor(chosen).plan({ ...ctx, combine, selectedCount }, path),
 								},
 							}
 						: {}),
@@ -389,6 +393,7 @@ export async function runExport(host: ExportHost, mode: ExportMode, source: Targ
 		if (chosen.combine !== undefined) ctx.combine = chosen.combine;
 		const notes = chosen.notes;
 		ctx.selected = new Set(notes);
+		ctx.selectedCount = notes.length;
 		// 開発用: 確認画面と同じ計算で、選んだノートの予定を求める（確認画面の表示と実際の出力の照合）
 		let plans: Record<string, string[]> | undefined;
 		if (auto?.plans) {
