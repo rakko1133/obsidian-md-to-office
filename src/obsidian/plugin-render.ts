@@ -10,6 +10,7 @@ import { texToSvg } from "../core/math-svg";
 import type { ImageAsset } from "../core/obsidian-syntax";
 import { loadImage } from "./vault-env";
 import { timed, timedSync } from "../core/profile";
+import { canvasToPng } from "./canvas-png";
 
 /** 0.5 秒続けて DOM が変わらなければ描画が終わったとみなす。1 依頼の上限は 10 秒（フェーズ 3b の決定事項）。 */
 const QUIET_MS = 500;
@@ -128,10 +129,7 @@ async function rasterize(el: Element): Promise<ImageAsset | null> {
 	}
 	if (name === "canvas") {
 		const canvas = el as HTMLCanvasElement;
-		const blob = await new Promise<Blob | null>((resolve) => canvas.toBlob(resolve, "image/png"));
-		if (!blob) return null;
-		const data = new Uint8Array(await blob.arrayBuffer());
-		return { type: "png", data, width: rect.width || canvas.width, height: rect.height || canvas.height };
+		return { type: "png", data: canvasToPng(canvas), width: rect.width || canvas.width, height: rect.height || canvas.height };
 	}
 	if (name === "img") {
 		const img = el as HTMLImageElement;
@@ -140,9 +138,7 @@ async function rasterize(el: Element): Promise<ImageAsset | null> {
 		canvas.width = img.naturalWidth || 1;
 		canvas.height = img.naturalHeight || 1;
 		canvas.getContext("2d")?.drawImage(img, 0, 0);
-		const blob = await new Promise<Blob | null>((resolve) => canvas.toBlob(resolve, "image/png"));
-		if (!blob) return null;
-		return { type: "png", data: new Uint8Array(await blob.arrayBuffer()), width: img.naturalWidth || rect.width, height: img.naturalHeight || rect.height };
+		return { type: "png", data: canvasToPng(canvas), width: img.naturalWidth || rect.width, height: img.naturalHeight || rect.height };
 	}
 	return null;
 }

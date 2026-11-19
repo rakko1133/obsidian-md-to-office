@@ -5,6 +5,7 @@ import type { MermaidRenderer, RenderedDiagram } from "../core/mermaid-export";
 import type { MermaidRenderParams } from "../core/mermaid";
 import { resolveCssVariables } from "../core/svg-css";
 import { timed } from "../core/profile";
+import { canvasToPng } from "./canvas-png";
 
 /**
  * SVG の作り方の版。キャッシュのキー（mermaid.js のバージョン）に足して、作り方を変えたときに古いキャッシュを使わないようにする。
@@ -88,12 +89,5 @@ async function svgToPng(svg: string, width: number, height: number, params: Merm
 		ctx.fillRect(0, 0, canvas.width, canvas.height);
 	}
 	ctx.drawImage(img, 0, 0, canvas.width, canvas.height);
-	const blob = await timed("mermaid/svgToPng/toBlob", () => new Promise<Blob>((resolve, reject) => {
-		try {
-			canvas.toBlob((b) => (b ? resolve(b) : reject(new Error("toBlob returned null"))), "image/png");
-		} catch (error) {
-			reject(error instanceof Error ? error : new Error(String(error)));
-		}
-	}));
-	return new Uint8Array(await blob.arrayBuffer());
+	return canvasToPng(canvas);
 }
