@@ -99,6 +99,9 @@ frontmatter の `export: false` による除外は常に有効で、設定は持
 | `pdfOrientation` | `portrait` / `landscape` | `portrait` | H1-PDF | 7 |
 | `pdfMarginsMm` | 上・下・左・右（mm） | 各 `25` | H1-PDF | 7 |
 | `pdfScale` | 10〜200 の整数（%） | `100` | H1-PDF | 7 |
+| `pdfFontSizePt` | 6〜24（pt、0.5 刻み）。本文の文字の大きさ | `10.5` | H1-PDF（読みやすさ） | 1.2 |
+| `pdfFontFamily` | CSS の font-family（本文）。空なら Obsidian のフォント | `"BIZ UDPGothic", "Hiragino Sans", "Noto Sans CJK JP", "Yu Gothic", Meiryo, sans-serif` | H1-PDF（読みやすさ） | 1.2 |
+| `pdfCodeFontFamily` | CSS の font-family（コード）。空なら Obsidian のフォント | `"BIZ UDGothic", "Osaka-Mono", "Noto Sans Mono CJK JP", Consolas, monospace` | H1-PDF（読みやすさ） | 1.2 |
 
 表紙・目次・ヘッダー・フッター・結合出力の並び順は Word の設定（`coverPage`・`tableOfContents`・`headerTitle`・`footerPageNumber`・`combineOrder`・`defaultCombine`）を共用する（フェーズ 7 の決定事項）。
 
