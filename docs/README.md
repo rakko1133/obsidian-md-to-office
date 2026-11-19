@@ -9,6 +9,7 @@ docs/
 ├── README.md                  この案内
 ├── requirements.md            要件の正本（R1〜R8・G1〜G5・H・ロードマップ・未決事項）
 ├── design/                    設計
+│   ├── specification.md       システム仕様書（実装済みの振る舞いを機能ごとにまとめたもの）
 │   ├── architecture.md        全体のコンポーネント図
 │   ├── flows/                 コンポーネントごとの処理フロー図（01〜10）
 │   ├── settings.md            設定項目の一覧（キー・既定値・要件・実装フェーズ）
@@ -24,6 +25,7 @@ docs/
 ## 読む順番
 
 1. [requirements.md](requirements.md): 何を作るか。要件はここが正本で、ほかの文書と食い違ったらこちらを優先する
+   - 今の版で何がどう動くかを一通り知りたいときは、先に [design/specification.md](design/specification.md) を読む
 2. [design/architecture.md](design/architecture.md): どのコンポーネントで作るか。各フロー図へのリンクもここにある
 3. [design/flows/](design/flows/): 各コンポーネントの中の処理。各ファイルの末尾に、まだ決まっていない点（「決める必要があること」）と決定済みの点がある
 4. [process/development.md](process/development.md): ビルド・テストの実行と、テスト用 Vault での確認の手順
