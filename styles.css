@@ -98,3 +98,23 @@
 	display: flex;
 	gap: 1em;
 }
+
+/* 画像・図（Mermaid などの SVG）は 1 ページに収め、ページの境目で切らない。
+   --batch-office-export-pdf-max-height は src/obsidian/pdf-print.ts が用紙・余白・拡大率から決める */
+.batch-office-export-pdf-root img,
+.batch-office-export-pdf-root svg {
+	max-width: 100%;
+	max-height: var(--batch-office-export-pdf-max-height, 100vh);
+	object-fit: contain;
+	break-inside: avoid;
+}
+
+.batch-office-export-pdf-root .mermaid,
+.batch-office-export-pdf-root .internal-embed.image-embed {
+	break-inside: avoid;
+}
+
+/* 見出しだけがページの下に残らないよう、次の要素と同じページにする */
+.batch-office-export-pdf-root :is(h1, h2, h3, h4, h5, h6) {
+	break-after: avoid;
+}

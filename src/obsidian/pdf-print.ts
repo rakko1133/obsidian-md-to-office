@@ -5,7 +5,7 @@
 // 表紙は本文と別に印刷し（ヘッダー・フッターを付けないため）、pdf-postprocess で本文の先頭に差し込む。
 import { Component, MarkdownRenderer, TFile, type App } from "obsidian";
 import { obsidianOpenUri } from "../core/note-assembly";
-import { headingKey, headingOfSubpath, pdfRelativePath, type PdfPageOptions } from "../core/pdf-export";
+import { headingKey, headingOfSubpath, pdfPrintableHeightPx, pdfRelativePath, type PdfPageOptions } from "../core/pdf-export";
 import { pdfLinkHref, postprocessPdf } from "../core/pdf-postprocess";
 import type { OutputRef, Warning } from "../core/types";
 import { waitForQuiet } from "./plugin-render";
@@ -89,6 +89,8 @@ async function printNow(app: App, job: PdfPrintJob): Promise<PdfPrintResult> {
 	const warnings: Warning[] = [];
 	const doc = activeDocument;
 	const root = doc.body.createDiv({ cls: ["print", ROOT_CLASS] });
+	// 画像・図の最大の高さ（styles.css で使う）
+	root.setCssProps({ "--batch-office-export-pdf-max-height": `${pdfPrintableHeightPx(job.page)}px` });
 	const component = new Component();
 	component.load();
 	try {
@@ -118,6 +120,8 @@ async function printNow(app: App, job: PdfPrintJob): Promise<PdfPrintResult> {
 				warnings.push({ code: "renderFailed", detail: `${chapter.notePath}: ${error instanceof Error ? error.message : String(error)}` });
 			}
 			if (job.combined) demoteHeadings(body);
+			// Mermaid 図の拡大・縮小のボタン（Obsidian 1.15 以降）は印刷しない
+			for (const control of Array.from(body.querySelectorAll(".pele-zoom"))) control.remove();
 			const ids = new Map<string, string>();
 			for (const h of Array.from(body.querySelectorAll<HTMLElement>("h1, h2, h3, h4, h5, h6"))) {
 				const id = `boe-h${++headingCount}`;

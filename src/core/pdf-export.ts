@@ -81,6 +81,22 @@ export function pdfPageOptions(settings: Pick<PluginSettings, "pdfPaperSize" | "
 	};
 }
 
+/** CSS の 1 インチ（px）。 */
+const CSS_PX_PER_INCH = 96;
+/** 画像・図の最大の高さの、印字領域の高さに対する割合。 */
+const IMAGE_HEIGHT_RATIO = 0.85;
+
+/**
+ * 画像・図の最大の高さ（CSS px）。1 ページの印字領域から決め、ページの境目で切れないようにする。
+ * 印刷では、レイアウトの大きさ = 用紙の大きさ ÷ 拡大率になる。ヘッダー・フッターは余白の中に印刷される。
+ * 直前の見出しと同じページに入るよう、印字領域の 85% にする。
+ */
+export function pdfPrintableHeightPx(page: PdfPageOptions): number {
+	const paperHeight = page.landscape ? page.pageSize.width : page.pageSize.height;
+	const inches = paperHeight - page.margins.top - page.margins.bottom;
+	return Math.max(1, Math.floor(((inches * CSS_PX_PER_INCH) / page.scale) * IMAGE_HEIGHT_RATIO));
+}
+
 /**
  * リンクの部分パス（`#見出し`・`#親#子`・`#^ブロックID`）から、見出しの名前を取り出す。
  * 入れ子の見出しは最後の要素を使う。ブロック ID・空なら null（ノートの先頭へのリンクにする）。
