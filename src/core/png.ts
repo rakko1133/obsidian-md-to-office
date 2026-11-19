@@ -76,3 +76,16 @@ function crc32(bytes: Uint8Array): number {
 	for (const b of bytes) crc = crcTable[(crc ^ b) & 0xff] ^ (crc >>> 8);
 	return (crc ^ 0xffffffff) >>> 0;
 }
+
+/**
+ * PNG の data URL（`data:image/png;base64,...`: canvas.toDataURL の戻り値）をバイト列にする。
+ * PNG の data URL でなければ例外（canvas が PNG に対応していないときは image/png 以外が返る）。
+ */
+export function pngDataUrlToBytes(dataUrl: string): Uint8Array {
+	const prefix = "data:image/png;base64,";
+	if (!dataUrl.startsWith(prefix)) throw new Error(`not a PNG data URL: ${dataUrl.slice(0, 32)}`);
+	const binary = atob(dataUrl.slice(prefix.length));
+	const bytes = new Uint8Array(binary.length);
+	for (let i = 0; i < binary.length; i++) bytes[i] = binary.charCodeAt(i);
+	return bytes;
+}

@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { readPngDpi, setPngDpi } from "../src/core/png";
+import { pngDataUrlToBytes, readPngDpi, setPngDpi } from "../src/core/png";
 
 // 1x1 の白い PNG（IHDR・IDAT・IEND だけ）
 const PNG_1x1 = Uint8Array.from(
@@ -33,5 +33,16 @@ describe("setPngDpi", () => {
 
 	it("PNG でなければ例外", () => {
 		expect(() => setPngDpi(new Uint8Array([1, 2, 3]), 96)).toThrow();
+	});
+});
+
+describe("PNG の data URL をバイト列にする", () => {
+	it("canvas.toDataURL の戻り値の base64 を元のバイト列に戻す", () => {
+		const url = `data:image/png;base64,${btoa(String.fromCharCode(...PNG_1x1))}`;
+		expect(pngDataUrlToBytes(url)).toEqual(PNG_1x1);
+	});
+
+	it("PNG 以外の data URL は例外にする（canvas が PNG に対応していないとき）", () => {
+		expect(() => pngDataUrlToBytes("data:,")).toThrow("not a PNG data URL");
 	});
 });

@@ -10,6 +10,7 @@ import { resolveCssVariables } from "../core/svg-css";
 import type { CodeToken, ImageAsset } from "../core/obsidian-syntax";
 import { createPluginRenderer } from "./plugin-render";
 import { timed, timedSync } from "../core/profile";
+import { canvasToPng } from "./canvas-png";
 
 /** SVG の PNG の代替画像の倍率（96 dpi の 2 倍 = 192 dpi。Mermaid の既定と同じ）。 */
 const SVG_FALLBACK_SCALE = 2;
@@ -90,14 +91,7 @@ async function toPng(img: HTMLImageElement, width: number, height: number, white
 		ctx.fillRect(0, 0, canvas.width, canvas.height);
 	}
 	timedSync("image/toPng/draw", () => ctx.drawImage(img, 0, 0, canvas.width, canvas.height));
-	const blob = await timed("image/toPng/toBlob", () => new Promise<Blob>((resolve, reject) => {
-		try {
-			canvas.toBlob((b) => (b ? resolve(b) : reject(new Error("toBlob returned null"))), "image/png");
-		} catch (error) {
-			reject(error instanceof Error ? error : new Error(String(error)));
-		}
-	}));
-	return new Uint8Array(await blob.arrayBuffer());
+	return canvasToPng(canvas);
 }
 
 interface PrismToken {
