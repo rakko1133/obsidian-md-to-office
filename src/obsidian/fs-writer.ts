@@ -55,7 +55,9 @@ export class FsOutputWriter implements OutputWriter {
 		} catch (error) {
 			if (signal.aborted) throw error;
 			const code = (error as NodeJS.ErrnoException).code;
-			if (code === "EBUSY" || code === "EPERM" || code === "EACCES") return { status: "skipped", reason: "inUse" };
+			// Windows では、ほかのアプリが開いているファイルへの rename が EBUSY / EPERM になる。
+			// EACCES はアクセス権がないことなので、使用中ではなく失敗として報告する
+			if (code === "EBUSY" || code === "EPERM") return { status: "skipped", reason: "inUse" };
 			return { status: "failed", reason: error instanceof Error ? error.message : String(error) };
 		} finally {
 			await fs.rm(tmp, { force: true }).catch(() => undefined);
