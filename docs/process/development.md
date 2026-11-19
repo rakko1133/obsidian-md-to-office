@@ -54,7 +54,7 @@ Obsidian の中でしか確かめられない処理（Mermaid・描画の取り�
 
 1. Obsidian でテスト用 Vault を開いておく（後ろや最小化でよい）。初回だけ、開発用ビルドを配置してからプラグインを無効 → 有効にする
 2. `npm run build:dev` → `npm run deploy:test-vault`。プラグインが `main.js` の変化に気づいて、自分で読み込み直す（数秒）
-3. `npm run obsidian:run -- --mode xlsx --path excel`（`--mode` は `mermaid` / `docx` / `xlsx`、`--path` は複数可で空文字は Vault 全体、`--set excelSheetUnit=perTable` でこの実行だけ設定を変える）
+3. `npm run obsidian:run -- --mode xlsx --path excel`（`--mode` は `mermaid` / `docx` / `xlsx`（PDF 出力の試作は `pdf`。出力は `_export/pdf/`）、`--path` は複数可で空文字は Vault 全体、`--set excelSheetUnit=perTable` でこの実行だけ設定を変える）
 4. 確認画面と結果画面は出さずに変換し、結果（ノートごとの状態・出力ファイル・警告）を表示する。続けて `npm run preview:export` で見た目を確かめる
 
 - 仕組み: プラグインのフォルダ（`test-vault/.obsidian/plugins/batch-office-export/`）に `dev-request.json` を置くと、プラグインが 1 秒ごとに見つけて実行し、`dev-result.json` に結果を書く。読み込んだときに `dev-status.json`（読み込んだ日時・`main.js` の更新日時）を書く。`--wait-reload` は読み込み直しを待つだけ

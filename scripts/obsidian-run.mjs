@@ -5,7 +5,7 @@
 //   node scripts/obsidian-run.mjs --mode docx --path word3a --path word3b --set downloadExternalImages=true
 //   node scripts/obsidian-run.mjs --wait-reload        # 配置した main.js を Obsidian が読み込み直すまで待つだけ
 //
-// オプション: --mode mermaid|docx|xlsx|both|summary（既定 docx）、--combine（1 フォルダを 1 つの .docx にまとめる）、--path（複数可。空文字で Vault 全体）、--set キー=値（複数可。この実行だけの設定。
+// オプション: --mode mermaid|docx|xlsx|both|summary|pdf（既定 docx。pdf は PDF 出力の試作。--set cover=true / toc=true / header=true / marginMm=25 / outDir=_export/pdf）、--combine（1 フォルダを 1 つの .docx にまとめる）、--path（複数可。空文字で Vault 全体）、--set キー=値（複数可。この実行だけの設定。
 // 値は JSON として読めればその値、読めなければ文字列）、--timeout 秒（既定 300）、--json（結果をそのまま出す）
 import { existsSync, readFileSync, statSync, unlinkSync, writeFileSync } from "node:fs";
 import { join } from "node:path";
@@ -109,4 +109,4 @@ if (opts.json) {
 	}
 	for (const w of result.runWarnings) console.log(`  run warning: ${w.code}${w.detail ? ` ${w.detail}` : ""}`);
 }
-process.exit(result.error || result.results.some((r) => r.status === "failed") ? 1 : 0);
+process.exit(result.error || result.results?.some((r) => r.status === "failed") ? 1 : 0);
