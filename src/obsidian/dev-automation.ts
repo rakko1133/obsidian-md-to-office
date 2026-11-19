@@ -25,6 +25,10 @@ interface DevRequest {
 	combine?: boolean;
 	/** 処理時間を計測して、結果に付ける */
 	profile?: boolean;
+	/** 確認画面でチェックを残すノート。省略するとすべての候補 */
+	select?: string[];
+	/** 確認画面に出す予定（ドライラン）を結果に付ける */
+	plans?: boolean;
 }
 
 export function registerDevAutomation(plugin: BatchOfficeExportPlugin, pluginDir: string): void {
@@ -86,13 +90,17 @@ export function registerDevAutomation(plugin: BatchOfficeExportPlugin, pluginDir
 			{ app: plugin.app, settings: plugin.settings, pluginDir },
 			request.mode,
 			source,
-			{ ...(request.settings ? { settings: request.settings } : {}), ...(request.combine ? { combine: true } : {}), ...(request.profile ? { profile: true } : {}) },
+			{ ...(request.settings ? { settings: request.settings } : {}), ...(request.combine ? { combine: true } : {}), ...(request.profile ? { profile: true } : {}),
+				...(request.select ? { select: request.select } : {}),
+				...(request.plans ? { plans: true } : {}),
+			},
 		);
 		if (!report) return { error: "not run (already running, no targets, or cancelled)" };
 		return {
 			end: report.end,
 			runWarnings: report.runWarnings,
 			...(report.profile ? { profile: report.profile } : {}),
+			...(report.plans ? { plans: report.plans } : {}),
 			results: report.results.map((r) => ({
 				notePath: r.notePath,
 				status: r.status,

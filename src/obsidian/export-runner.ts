@@ -265,6 +265,10 @@ export interface AutoRunOptions {
 	combine?: boolean;
 	/** 処理時間を計測して、結果に付ける（高速化の検討） */
 	profile?: boolean;
+	/** 確認画面でチェックを残すノート（Vault からの相対パス）。省略するとすべての候補 */
+	select?: readonly string[];
+	/** 確認画面に出す予定（ドライラン）を、選んだノートについて計算して結果に付ける */
+	plans?: boolean;
 }
 
 export interface RunReport {
@@ -273,6 +277,8 @@ export interface RunReport {
 	runWarnings: Warning[];
 	/** 処理時間の集計（AutoRunOptions.profile のときだけ） */
 	profile?: ReturnType<Profiler["report"]>;
+	/** 確認画面に出す予定（AutoRunOptions.plans のときだけ）。ノート → 出力（`{location}:{path}`）の一覧 */
+	plans?: Record<string, string[]>;
 }
 
 type RunOutcomeEnd = Awaited<ReturnType<typeof runSequential>>["end"];
@@ -354,7 +360,9 @@ export async function runExport(host: ExportHost, mode: ExportMode, source: Targ
 					? settings.externalOutputRoot
 					: `${settings.outputRoot}/`;
 		const selected = auto
-			? targets
+			? auto.select
+				? targets.filter((path) => auto.select?.includes(path))
+				: targets
 			: await confirmTargets(app, {
 					title: definition.title(),
 					targets,
@@ -381,6 +389,12 @@ export async function runExport(host: ExportHost, mode: ExportMode, source: Targ
 		if (chosen.combine !== undefined) ctx.combine = chosen.combine;
 		const notes = chosen.notes;
 		ctx.selected = new Set(notes);
+		// 開発用: 確認画面と同じ計算で、選んだノートの予定を求める（確認画面の表示と実際の出力の照合）
+		let plans: Record<string, string[]> | undefined;
+		if (auto?.plans) {
+			plans = {};
+			for (const path of notes) plans[path] = (await definition.plan(ctx, path)).map((p) => `${p.output.location}:${p.output.path}`);
+		}
 
 		// 10: マニフェストは開始時に 1 回だけ読む（D4）
 		const { snapshot, warnings: loadWarnings } = await timed("run/manifestLoad", () => store.load());
@@ -427,7 +441,13 @@ export async function runExport(host: ExportHost, mode: ExportMode, source: Targ
 		}
 		await timed("run/cacheEvict", () => cache.evict()).catch(() => undefined);
 
-		const report: RunReport = { end: outcome.end, results: outcome.results, runWarnings, ...(profiler ? { profile: profiler.report() } : {}) };
+		const report: RunReport = {
+			end: outcome.end,
+			results: outcome.results,
+			runWarnings,
+			...(profiler ? { profile: profiler.report() } : {}),
+			...(plans ? { plans } : {}),
+		};
 		if (!auto) showReport(app, report);
 		return report;
 	} finally {
