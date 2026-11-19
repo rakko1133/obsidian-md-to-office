@@ -12,7 +12,7 @@ import { joinPath, noteBaseName, outputDirFor, plannedAction, relativeUrl } from
 import { setPngDpi } from "./png";
 import { aggregateStatus } from "./run";
 import type { PluginSettings } from "./settings";
-import type { FileResult, ManifestSnapshot, NoteResult, OutputRef, PlannedAction, Warning } from "./types";
+import type { FileResult, ManifestSnapshot, NoteResult, OutputKind, OutputRef, PlannedAction, Warning } from "./types";
 
 /** Vault の読み取り（Obsidian 側が実装する: フェーズ 3a）。 */
 export type VaultEnvironment = Omit<NoteEnvironment, "readNote" | "isConverted" | "docxLink"> & {
@@ -254,7 +254,7 @@ export async function writeWithConflictPolicy(
 	onConflict: PluginSettings["onConflict"],
 	deps: Pick<MermaidExportDeps, "writer">,
 	signal: AbortSignal,
-	kind: "docx" | "xlsx",
+	kind: Exclude<OutputKind, "image">,
 ): Promise<FileResult> {
 	const action = plannedAction(await deps.writer.exists(output), false, onConflict);
 	if (action === "skip") return { output, kind, status: "skipped", reason: "exists" };

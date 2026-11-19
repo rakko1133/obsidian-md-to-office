@@ -2,37 +2,60 @@
 // - mermaid: Mermaid 画像として保存（R1 の単独保存・フェーズ 1）
 // - docx: Word に変換（フェーズ 2。フェーズ 3a でリンク・埋め込み・画像などを足した）
 // - xlsx: Excel に変換（フェーズ 4a）。1 フォルダ = 1 ブックでは、全ノートの処理の後にブックを完成させる（D7）
-import { FileSystemAdapter, Notice, TFile, normalizePath, type App } from "obsidian";
+// - pdf: PDF に変換（フェーズ 7・H1-PDF）
+// 確認画面で複数の形式を選んだときは、形式ごとのモードを順に組み合わせる（definitionFor）
+import { FileSystemAdapter, Notice, TFile, getLanguage, normalizePath, type App } from "obsidian";
 import { promises as fs } from "fs";
 import * as nodePath from "path";
 import { exportDocxNote, planDocxNote, type PlannedOutput, type VaultEnvironment } from "../core/docx-export";
 import { applyResults } from "../core/manifest";
 import { exportMermaidNote, planMermaidNote, type MermaidExportDeps } from "../core/mermaid-export";
-import { failedResult, mergeResults, runSequential } from "../core/run";
+import { planPdfNote } from "../core/pdf-export";
+import { failedResult, mergeAllResults, runSequential } from "../core/run";
 import { DocxCombineRun, planCombinedNote } from "../core/docx-combine";
 import { readTemplate, type WordTemplate } from "../core/docx-template";
 import { XlsxRun, planXlsxNote, xlsxUnit } from "../core/xlsx-export";
 import { SummaryRun, planSummary, type SummaryLabels } from "../core/xlsx-summary";
 import type { XlsxLabels } from "../core/xlsx-render";
-import type { PluginSettings } from "../core/settings";
+import type { OutputFormat, PluginSettings } from "../core/settings";
 import { filterTargets } from "../core/targets";
 import type { ManifestSnapshot, NoteResult, OutputRef, Warning } from "../core/types";
 import { t } from "../i18n";
 import { collectCandidates, type TargetSource } from "./collect";
-import { confirmTargets, type OfficeFormat } from "./confirm-modal";
+import { confirmTargets } from "./confirm-modal";
 import { FsDiagramCache } from "./diagram-cache";
 import { FsOutputWriter, type OutputRoots } from "./fs-writer";
 import { ManifestStore } from "./manifest-store";
 import { createMermaidRenderer } from "./mermaid-renderer";
+import { PdfRun } from "./pdf-export";
+import { useLightTheme } from "./pdf-print";
 import { createVaultEnvironment } from "./vault-env";
 import { ProgressNotice } from "./progress";
 import { showReport } from "./report-modal";
 
-/** office は「確認画面で形式を選ぶ」（初期値は設定 defaultFormat: R8） */
-export type ExportMode = "mermaid" | "docx" | "xlsx" | "both" | "summary" | "office";
+/** office は「確認画面で形式を選ぶ」（初期値は設定 defaultFormats: R8）。both は Word と Excel */
+export type ExportMode = "mermaid" | "docx" | "xlsx" | "pdf" | "both" | "summary" | "office";
 
-/** 出力形式 → モード（R8）。 */
-const FORMAT_MODES: Record<OfficeFormat, "docx" | "xlsx" | "both"> = { word: "docx", excel: "xlsx", both: "both" };
+/** 出力形式 → モード（R8・H1-PDF）。 */
+const FORMAT_MODES: Record<OutputFormat, "docx" | "xlsx" | "pdf"> = { word: "docx", excel: "xlsx", pdf: "pdf" };
+
+/** 起動したモードで最初に選ばれている形式。形式を選ばないモード（Mermaid・集計）は undefined。 */
+function formatsOfMode(mode: ExportMode, settings: PluginSettings): OutputFormat[] | undefined {
+	switch (mode) {
+		case "docx":
+			return ["word"];
+		case "xlsx":
+			return ["excel"];
+		case "pdf":
+			return ["pdf"];
+		case "both":
+			return ["word", "excel"];
+		case "office":
+			return [...settings.defaultFormats];
+		default:
+			return undefined;
+	}
+}
 
 export interface ExportHost {
 	app: App;
@@ -63,6 +86,8 @@ interface ModeContext {
 	manifest?: ManifestSnapshot;
 	/** Word のテンプレート（C-1b。実行の最初に 1 回読む） */
 	template?: WordTemplate;
+	/** PDF の実行の状態（H1-PDF） */
+	pdf?: PdfRun;
 }
 
 /** Word の体裁の文字とテンプレート（DocxExportDeps に足す）。 */
@@ -81,7 +106,7 @@ interface ModeDefinition {
 	finish?(ctx: ModeContext, results: NoteResult[]): Promise<void>;
 }
 
-const MODES: Record<Exclude<ExportMode, "office">, ModeDefinition> = {
+const MODES: Record<Exclude<ExportMode, "office" | "both">, ModeDefinition> = {
 	mermaid: {
 		title: () => t("confirm.title"),
 		plan: async ({ settings, deps }, path) => planMermaidNote(path, await deps.readNote(path), settings, deps.renderer.version, (ref) => deps.writer.exists(ref)),
@@ -128,24 +153,20 @@ const MODES: Record<Exclude<ExportMode, "office">, ModeDefinition> = {
 		process: ({ xlsx }, path, signal) => xlsx!.addNote(path, signal),
 		finish: ({ xlsx }, results) => xlsx!.finish(results),
 	},
-	both: {
-		title: () => t("confirm.titleBoth"),
-		plan: async (ctx, path) => [...(await MODES.docx.plan(ctx, path)), ...(await MODES.xlsx.plan(ctx, path))],
+	pdf: {
+		title: () => t("confirm.titlePdf"),
+		plan: ({ settings, deps, vault, combine }, path) => planPdfNote(path, settings, combine, vault.vaultName, (ref: OutputRef) => deps.writer.exists(ref)),
 		start: (ctx, selected) => {
-			MODES.docx.start!(ctx, selected);
-			MODES.xlsx.start!(ctx, selected);
+			ctx.pdf = new PdfRun(ctx.app, ctx.settings, selected, ctx.manifest ?? { entries: [] }, ctx.combine, {
+				writer: ctx.deps.writer,
+				readNote: ctx.deps.readNote,
+				vault: ctx.vault,
+				tocLabel: t("docx.toc"),
+				lang: getLanguage(),
+			});
 		},
-		// ノートごとに .docx を作り、同じノートを Excel のブックにも足す。結果は 2 つの出力のうち重いほう（D5）。表がないことは Excel だけの事情なので、ノートのスキップにしない
-		process: async (ctx, path, signal, manifest) => {
-			const toFailed = (error: unknown) => failedResult(path, error instanceof Error ? error.message : String(error));
-			const docx = await MODES.docx.process(ctx, path, signal, manifest).catch(toFailed);
-			const xlsx = await MODES.xlsx.process(ctx, path, signal, manifest).catch(toFailed);
-			return mergeResults(docx, xlsx);
-		},
-		finish: async (ctx, results) => {
-			await MODES.docx.finish!(ctx, results);
-			await MODES.xlsx.finish!(ctx, results);
-		},
+		process: ({ pdf }, path, signal) => pdf!.addNote(path, signal),
+		finish: ({ pdf }, results) => pdf!.finish(results),
 	},
 	summary: {
 		title: () => t("confirm.titleSummary"),
@@ -157,6 +178,31 @@ const MODES: Record<Exclude<ExportMode, "office">, ModeDefinition> = {
 		finish: ({ summary }, results) => summary!.finish(results),
 	},
 };
+
+/**
+ * 選んだ形式のモード。2 つ以上なら、形式ごとのモードを順に組み合わせる。ノートの結果は出力のうちいちばん重いもの（D5）。
+ * 表がないことは Excel だけの事情なので、ノートのスキップにしない（mergeResults）。
+ */
+function definitionFor(formats: readonly OutputFormat[]): ModeDefinition {
+	const parts = formats.map((f) => MODES[FORMAT_MODES[f]]);
+	if (parts.length === 1) return parts[0];
+	return {
+		title: () => t("confirm.titleFormats", { formats: formats.map((f) => t(`format.${f}`)).join(" / ") }),
+		plan: async (ctx, path) => (await Promise.all(parts.map((part) => part.plan(ctx, path)))).flat(),
+		start: (ctx, selected) => {
+			for (const part of parts) part.start?.(ctx, selected);
+		},
+		process: async (ctx, path, signal, manifest) => {
+			const toFailed = (error: unknown) => failedResult(path, error instanceof Error ? error.message : String(error));
+			const results: NoteResult[] = [];
+			for (const part of parts) results.push(await part.process(ctx, path, signal, manifest).catch(toFailed));
+			return mergeAllResults(results);
+		},
+		finish: async (ctx, results) => {
+			for (const part of parts) await part.finish?.(ctx, results);
+		},
+	};
+}
 
 /** Vault 全体の集計のシートと列の名前（UI の言語に合わせる）。 */
 function summaryLabels(): SummaryLabels {
@@ -236,10 +282,6 @@ export async function runExport(host: ExportHost, mode: ExportMode, source: Targ
 		return null;
 	}
 	const { app } = host;
-	// 確認画面で選ぶ出力形式（Word / Excel / 両方・R8）。初期値は、起動したコマンドの形式か設定 defaultFormat
-	const initialFormat: OfficeFormat | undefined =
-		mode === "office" ? host.settings.defaultFormat : mode === "docx" ? "word" : mode === "xlsx" ? "excel" : mode === "both" ? "both" : undefined;
-	let definition = MODES[mode === "office" ? FORMAT_MODES[host.settings.defaultFormat] : mode];
 	if (source.kind === "active" && !(app.workspace.getActiveFile()?.extension === "md")) {
 		new Notice(t("notice.noActiveNote"));
 		return null;
@@ -248,6 +290,10 @@ export async function runExport(host: ExportHost, mode: ExportMode, source: Targ
 	if (!(adapter instanceof FileSystemAdapter)) return null; // isDesktopOnly なので通常は来ない
 	// 実行中に設定が変わっても影響しないよう、写しを使う
 	const settings: PluginSettings = { ...structuredClone(host.settings), ...structuredClone(auto?.settings ?? {}) };
+	// 確認画面で選ぶ出力形式（Word / Excel / PDF の組み合わせ・R8・H1-PDF）。初期値は、起動したコマンドの形式か設定 defaultFormats
+	const initialFormats = formatsOfMode(mode, settings);
+	let formats = initialFormats;
+	let definition = initialFormats ? definitionFor(initialFormats) : MODES[mode as "mermaid" | "summary"];
 	if (settings.outputLocation === "external" && settings.saveMode === "mirror" && settings.externalOutputRoot === "") {
 		new Notice(t("notice.externalRootMissing"));
 		return null;
@@ -307,20 +353,23 @@ export async function runExport(host: ExportHost, mode: ExportMode, source: Targ
 					excludedCount: excluded.length,
 					outputLabel,
 					plan: (path) => definition.plan(ctx, path),
-					...(initialFormat
+					...(initialFormats
 						? {
 								formats: {
-									initial: initialFormat,
+									initial: initialFormats,
 									combine: settings.defaultCombine,
-									title: (format: OfficeFormat) => MODES[FORMAT_MODES[format]].title(),
-									plan: (format: OfficeFormat, combine: boolean, path: string) => MODES[FORMAT_MODES[format]].plan({ ...ctx, combine }, path),
+									title: (chosen: readonly OutputFormat[]) => definitionFor(chosen).title(),
+									plan: (chosen: readonly OutputFormat[], combine: boolean, path: string) => definitionFor(chosen).plan({ ...ctx, combine }, path),
 								},
 							}
 						: {}),
 				});
 		const chosen = Array.isArray(selected) ? { notes: selected } : selected;
 		if (!chosen || chosen.notes.length === 0) return null;
-		if (chosen.format) definition = MODES[FORMAT_MODES[chosen.format]];
+		if (chosen.formats) {
+			formats = chosen.formats;
+			definition = definitionFor(chosen.formats);
+		}
 		if (chosen.combine !== undefined) ctx.combine = chosen.combine;
 		const notes = chosen.notes;
 		ctx.selected = new Set(notes);
@@ -330,7 +379,7 @@ export async function runExport(host: ExportHost, mode: ExportMode, source: Targ
 		ctx.manifest = snapshot;
 		const runWarnings: Warning[] = [...loadWarnings];
 		// Word のテンプレート（C-1b）: 読めなければ内蔵のスタイルで続け、実行の警告にする。結合出力の準備（start）より前に読む
-		if (settings.wordTemplatePath !== "" && (definition === MODES.docx || definition === MODES.both)) {
+		if (settings.wordTemplatePath !== "" && formats?.includes("word")) {
 			try {
 				ctx.template = readTemplate(await readTemplateBytes(app, settings.wordTemplatePath));
 			} catch (error) {
@@ -341,6 +390,8 @@ export async function runExport(host: ExportHost, mode: ExportMode, source: Targ
 
 		// 03: 1 件ずつ順に変換
 		const progress = new ProgressNotice();
+		// PDF は Obsidian の表示で描くので、実行の間だけライトテーマにする（H1-PDF）
+		const restoreTheme = formats?.includes("pdf") ? useLightTheme() : () => undefined;
 		let outcome;
 		try {
 			outcome = await runSequential({
@@ -355,6 +406,7 @@ export async function runExport(host: ExportHost, mode: ExportMode, source: Targ
 			// 束ねる出力（1 フォルダ = 1 ブック）を完成させる。中断・fail-fast でも処理済みの分で完成させる
 			await definition.finish?.(ctx, outcome.results);
 		} finally {
+			restoreTheme();
 			progress.hide();
 		}
 

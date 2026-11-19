@@ -40,7 +40,19 @@
 	color: var(--callout-color);
 }
 
-/* PDF 出力の試作（H1-PDF）: Obsidian の印刷用の .print の中だけに効く */
+/* PDF 出力（H1-PDF）: body 直下の .print に描いて印刷する（src/obsidian/pdf-print.ts）。
+   画面では見えない場所に置く。印刷のときは Obsidian の印刷用の CSS が .print 以外を隠す */
+@media screen {
+	.batch-office-export-pdf-root {
+		position: fixed;
+		left: -10000px;
+		top: 0;
+		width: 800px;
+		visibility: hidden;
+		pointer-events: none;
+	}
+}
+
 .print .batch-office-export-pdf-chapter + .batch-office-export-pdf-chapter {
 	break-before: page;
 }
@@ -49,16 +61,40 @@
 	break-after: page;
 }
 
+.print .batch-office-export-pdf-toc ul {
+	list-style: none;
+	padding-inline-start: 0;
+	margin-inline-start: 0;
+}
+
+.print .batch-office-export-pdf-toc li {
+	margin-inline-start: 0;
+	padding-inline-start: 0;
+}
+
+.print .batch-office-export-pdf-toc li.batch-office-export-pdf-toc-h2 {
+	padding-inline-start: 1.5em;
+}
+
+.print .batch-office-export-pdf-toc li.batch-office-export-pdf-toc-h3 {
+	padding-inline-start: 3em;
+}
+
 .print .batch-office-export-pdf-cover {
 	padding-top: 35vh;
 	text-align: center;
+}
+
+.print .batch-office-export-pdf-cover h1 {
+	font-size: 2.4em;
+	border: none;
 }
 
 .print .batch-office-export-pdf-hidden {
 	display: none;
 }
 
-.print .batch-office-export-pdf-cover h1 {
-	font-size: 2.4em;
-	border: none;
+.batch-office-export-formats {
+	display: flex;
+	gap: 1em;
 }
