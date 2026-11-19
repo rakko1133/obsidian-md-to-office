@@ -13,6 +13,7 @@ import { setPngDpi } from "./png";
 import { aggregateStatus } from "./run";
 import type { PluginSettings } from "./settings";
 import type { FileResult, ManifestSnapshot, NoteResult, OutputKind, OutputRef, PlannedAction, Warning } from "./types";
+import { timed } from "./profile";
 
 /** Vault の読み取り（Obsidian 側が実装する: フェーズ 3a）。 */
 export type VaultEnvironment = Omit<NoteEnvironment, "readNote" | "isConverted" | "docxLink"> & {
@@ -120,7 +121,7 @@ export async function planDocxNote(notePath: string, settings: PluginSettings, e
 
 /** Mermaid の図 1 つの SVG と PNG を、キャッシュから取るか描画して作る（.docx への埋め込み用: SVG + PNG フォールバック）。 */
 export async function diagramAsset(block: MermaidBlock, params: MermaidRenderParams, deps: Pick<MermaidExportDeps, "renderer" | "cache">, signal: AbortSignal): Promise<DiagramAsset> {
-	const hash = await diagramHash(block.source, params, deps.renderer.version);
+	const hash = await timed("diagram/hash", () => diagramHash(block.source, params, deps.renderer.version));
 	let svg = await deps.cache.get(hash, "svg").catch(() => null);
 	let png = await deps.cache.get(hash, "png").catch(() => null);
 	if (!svg || !png) {
@@ -159,7 +160,7 @@ export async function exportDocxNote(
 
 	// 設定で有効なときだけ、Mermaid の画像ファイルも保存する（R8）。描画結果はキャッシュに残るので、下の埋め込みで再利用される
 	if (settings.saveImageFiles) {
-		const images = await exportMermaidNote(notePath, signal, settings, manifest, deps);
+		const images = await timed("docx/mermaidFiles", () => exportMermaidNote(notePath, signal, settings, manifest, deps));
 		files.push(...images.files);
 		deleted.push(...images.deleted);
 		warnings.push(...images.warnings.filter((w) => w.code !== "noDiagrams"));
@@ -167,10 +168,10 @@ export async function exportDocxNote(
 
 	const ownOutput = docxOutputRef(notePath, settings);
 	const converted = convertedNotes(deps.convertedNotes, manifest);
-	const prepared = await prepareDocxNote(notePath, signal, settings, deps, {
+	const prepared = await timed("docx/prepare", () => prepareDocxNote(notePath, signal, settings, deps, {
 		isConverted: (path) => converted.has(path),
 		docxLink: (target) => relativeUrl(ownOutput, docxOutputRef(target, settings)),
-	});
+	}));
 	const { assembled, diagrams, fm } = prepared;
 	const { tree } = assembled;
 	warnings.push(...prepared.warnings);
@@ -179,7 +180,7 @@ export async function exportDocxNote(
 
 	if (signal.aborted) throw signal.reason instanceof Error ? signal.reason : new Error("aborted");
 	const bytes = new Uint8Array(
-		await renderDocx(tree, {
+		await timed("docx/render", () => renderDocx(tree, {
 			title,
 			creator,
 			strictLineBreaks: deps.strictLineBreaks ?? settings.strictLineBreaksFallback,
@@ -199,10 +200,10 @@ export async function exportDocxNote(
 			...(settings.frontmatterTable ? { propertiesTable: fm.table } : {}),
 			...pageDecorations(settings, { title, author: fm.author ?? settings.authorName, date: valueToText(prepared.rawFrontmatter?.date), combined: false }, deps.tocLabel),
 			...styleOptions(settings, deps),
-		}),
+		})),
 	);
 
-	files.push(await writeWithConflictPolicy(ownOutput, bytes, settings.onConflict, deps, signal, "docx"));
+	files.push(await timed("docx/write", () => writeWithConflictPolicy(ownOutput, bytes, settings.onConflict, deps, signal, "docx")));
 	return { notePath, status: aggregateStatus(files), files, warnings, deleted };
 }
 
@@ -227,7 +228,9 @@ export async function prepareDocxNote(
 		readNote: deps.readNote,
 		...links,
 	};
-	const assembled = await assembleNote(notePath, env, { keepComments: settings.keepCommentsAsWordComments, downloadExternalImages: settings.downloadExternalImages, signal });
+	const assembled = await timed("docx/prepare/assemble", () =>
+		assembleNote(notePath, env, { keepComments: settings.keepCommentsAsWordComments, downloadExternalImages: settings.downloadExternalImages, signal }),
+	);
 	warnings.push(...assembled.warnings);
 	const rawFrontmatter = vault.frontmatter?.(notePath);
 	const fm = mapFrontmatter(rawFrontmatter);
@@ -236,7 +239,7 @@ export async function prepareDocxNote(
 	const diagrams = new Map<number, DiagramAsset>();
 	for (const block of mermaidBlocksOf(assembled.tree)) {
 		try {
-			diagrams.set(block.index, await diagramAsset(block, params, deps, signal));
+			diagrams.set(block.index, await timed("docx/prepare/diagram", () => diagramAsset(block, params, deps, signal)));
 		} catch (error) {
 			if (signal.aborted) throw error;
 			// 描画に失敗した図は、ソースをコードブロックとして残す（R4）

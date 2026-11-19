@@ -3,6 +3,7 @@ import { promises as fs } from "fs";
 import * as nodePath from "path";
 import { CACHE_LIMIT_BYTES, selectEvictions, type CacheFile } from "../core/cache-policy";
 import type { DiagramCache } from "../core/mermaid-export";
+import { timed } from "../core/profile";
 
 export class FsDiagramCache implements DiagramCache {
 	constructor(private readonly dir: string) {}
@@ -11,7 +12,11 @@ export class FsDiagramCache implements DiagramCache {
 		return nodePath.join(this.dir, `${hash}.${ext}`);
 	}
 
-	async get(hash: string, ext: "svg" | "png"): Promise<Uint8Array | null> {
+	get(hash: string, ext: "svg" | "png"): Promise<Uint8Array | null> {
+		return timed("io/cacheGet", () => this.read(hash, ext));
+	}
+
+	private async read(hash: string, ext: "svg" | "png"): Promise<Uint8Array | null> {
 		const path = this.file(hash, ext);
 		try {
 			const bytes = await fs.readFile(path);

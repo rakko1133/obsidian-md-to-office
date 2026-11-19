@@ -9,6 +9,7 @@ import { svgSize, type VaultEnvironment } from "../core/docx-export";
 import { resolveCssVariables } from "../core/svg-css";
 import type { CodeToken, ImageAsset } from "../core/obsidian-syntax";
 import { createPluginRenderer } from "./plugin-render";
+import { timed } from "../core/profile";
 
 /** SVG の PNG の代替画像の倍率（96 dpi の 2 倍 = 192 dpi。Mermaid の既定と同じ）。 */
 const SVG_FALLBACK_SCALE = 2;
@@ -29,7 +30,10 @@ export async function createVaultEnvironment(app: App): Promise<VaultEnvironment
 			const file = app.vault.getAbstractFileByPath(path);
 			return file instanceof TFile ? (app.metadataCache.getFileCache(file)?.frontmatter) : undefined;
 		},
-		loadImage: async (path) => loadImage(new Uint8Array(await app.vault.readBinary(fileOf(path))), fileOf(path).extension.toLowerCase()),
+		loadImage: async (path) => {
+			const bytes = new Uint8Array(await timed("asset/loadImage/read", () => app.vault.readBinary(fileOf(path))));
+			return timed("asset/loadImage/convert", () => loadImage(bytes, fileOf(path).extension.toLowerCase()));
+		},
 		highlight: (code, lang) => (prism ? tokenize(prism, code, lang) : null),
 		// フェーズ 3b: 他のプラグインの描画・数式の画像・外部の画像・テーマのコールアウトの色
 		renderableLanguage: plugins.renderableLanguage,

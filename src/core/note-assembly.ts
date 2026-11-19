@@ -24,6 +24,7 @@ import {
 	type WikiLink,
 } from "./obsidian-syntax";
 import type { Warning } from "./types";
+import { timed, timedSync } from "./profile";
 
 /** 埋め込みの深さの上限（フェーズ 3 の決定事項: 固定）。 */
 export const MAX_EMBED_DEPTH = 5;
@@ -90,12 +91,14 @@ interface State {
 
 export async function assembleNote(rootPath: string, env: NoteEnvironment, options: AssembleOptions): Promise<AssembledNote> {
 	const state: State = { env, options, warnings: [], comments: [], noteCount: 0 };
-	const { tree, source } = await loadNote(rootPath, state);
-	await expandEmbeds(tree, rootPath, state, [rootPath], 0);
-	await renderPluginBlocks(tree, rootPath, state);
-	markMermaid(tree);
-	resolveLinks(tree, rootPath, state);
-	await prepareAssets(tree, state);
+	const { tree, source } = await timed("assemble/load", () => loadNote(rootPath, state));
+	await timed("assemble/embeds", () => expandEmbeds(tree, rootPath, state, [rootPath], 0));
+	await timed("assemble/pluginBlocks", () => renderPluginBlocks(tree, rootPath, state));
+	timedSync("assemble/links", () => {
+		markMermaid(tree);
+		resolveLinks(tree, rootPath, state);
+	});
+	await timed("assemble/assets", () => prepareAssets(tree, state));
 	return { tree, source, comments: state.comments, warnings: dedupe(state.warnings) };
 }
 
@@ -107,7 +110,7 @@ async function loadNote(path: string, state: State): Promise<{ tree: Root; sourc
 	// Word のコメントにしないときは、中身を持たない（comments.xml を作らない）
 	if (state.options.keepComments) state.comments.push(...comments);
 	const noteNo = state.noteCount++;
-	const tree = parseMarkdown(text);
+	const tree = timedSync("assemble/load/parse", () => parseMarkdown(text));
 
 	resolveReferences(tree);
 	if (state.options.keepComments) {
@@ -503,6 +506,21 @@ async function prepareAssets(tree: Root, state: State): Promise<void> {
 			if (color) node.data = { ...node.data, calloutColor: color };
 		}
 	});
+	await timed("assemble/assets/images", () => loadImages(images, state));
+	await timed("assemble/assets/math", () => prepareMath(maths, state));
+	if (state.env.highlight) {
+		const highlight = state.env.highlight;
+		timedSync("assemble/assets/highlight", () => {
+			for (const node of codes) {
+				const tokens = highlight(node.value, node.lang!);
+				if (tokens) node.data = { ...node.data, tokens };
+			}
+		});
+	}
+}
+
+async function loadImages(images: EmbedImage[], state: State): Promise<void> {
+	const { env } = state;
 	for (const node of images) {
 		const load = node.url ? env.fetchImage?.bind(env, node.url) : env.loadImage?.bind(env, node.path);
 		if (!load) continue;
@@ -512,7 +530,11 @@ async function prepareAssets(tree: Root, state: State): Promise<void> {
 			state.warnings.push({ code: "imageFailed", detail: `${node.url ?? node.path}: ${error instanceof Error ? error.message : String(error)}` });
 		}
 	}
-	// 数式（A-11）: latexToMath で変換できない式は、MathJax の画像にする
+}
+
+/** 数式（A-11）: latexToMath で変換できない式は、MathJax の画像にする */
+async function prepareMath(maths: (MdMath | InlineMath)[], state: State): Promise<void> {
+	const { env } = state;
 	for (const node of maths) {
 		try {
 			latexToMath(node.value);
@@ -530,12 +552,6 @@ async function prepareAssets(tree: Root, state: State): Promise<void> {
 			}
 			node.data = { ...node.data, unsupported: true };
 			state.warnings.push({ code: "mathFailed", detail: `${node.value}: ${reason}` });
-		}
-	}
-	if (state.env.highlight) {
-		for (const node of codes) {
-			const tokens = state.env.highlight(node.value, node.lang!);
-			if (tokens) node.data = { ...node.data, tokens };
 		}
 	}
 }

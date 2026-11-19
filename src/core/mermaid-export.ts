@@ -6,6 +6,7 @@ import { setPngDpi } from "./png";
 import { aggregateStatus } from "./run";
 import type { PluginSettings } from "./settings";
 import type { FileResult, ManifestSnapshot, NoteResult, OutputRef, PlannedAction, Warning } from "./types";
+import { timed } from "./profile";
 
 /** 描画の部品（src/obsidian/mermaid-renderer.ts）。 */
 export interface MermaidRenderer {
@@ -117,7 +118,7 @@ export async function exportMermaidNote(
 			if (cached) return cached;
 			if (!rendered) {
 				throwIfAborted(signal);
-				rendered = await deps.renderer.render(buildRenderSource(block.source, params), params, wanted.includes("png"), signal);
+				rendered = await timed("mermaidFiles/render", () => deps.renderer.render(buildRenderSource(block.source, params), params, wanted.includes("png"), signal));
 				const svgBytes = new TextEncoder().encode(rendered.svg);
 				await deps.cache.put(hash, "svg", svgBytes).catch(() => warnings.push({ code: "cacheFailed", detail: String(block.index) }));
 				if (rendered.png) {

@@ -9,6 +9,7 @@ import { baseName, dirName, joinPath, noteBaseName, outputDirFor, plannedAction,
 import { aggregateStatus } from "./run";
 import type { PluginSettings } from "./settings";
 import type { FileResult, ManifestSnapshot, NoteResult, OutputRef } from "./types";
+import { timed } from "./profile";
 
 /** 章へのリンクを「まとめるときに決める」ための URL の形 */
 export const CHAPTER_LINK_SCHEME = "boe-chapter:";
@@ -227,7 +228,7 @@ export class DocxCombineRun {
 			group.contributors.push(notePath);
 			return { notePath, status: "success", files: [], warnings: [], deleted: [] };
 		}
-		const prepared = await prepareDocxNote(notePath, signal, this.settings, this.deps, {
+		const prepared = await timed("docx/prepare", () => prepareDocxNote(notePath, signal, this.settings, this.deps, {
 			isConverted: (path) => this.converted.has(path),
 			// 同じ文書に入るノートは章へのリンク（まとめるときに決める）、別の文書に入るノートはその .docx への相対リンク（C-8）
 			docxLink: (target) => {
@@ -235,7 +236,7 @@ export class DocxCombineRun {
 				if (targetOutput && refKey(targetOutput) === ownKey) return `${CHAPTER_LINK_SCHEME}${target}`;
 				return relativeUrl(group.output, targetOutput ?? { location: group.output.location, path: joinPath(outputDirFor(target, this.settings).path, `${noteBaseName(target)}.docx`) });
 			},
-		});
+		}));
 		// タイムアウトしたノートは章にしない（D1・D2）
 		if (signal.aborted) throw signal.reason instanceof Error ? signal.reason : new Error("aborted");
 		const order = Number(valueToText(prepared.rawFrontmatter?.order));
@@ -271,7 +272,7 @@ export class DocxCombineRun {
 				const title = fm.title ?? group.folderName;
 				const creator = fm.author ?? this.settings.authorName;
 				const bytes = new Uint8Array(
-					await renderDocx(tree, {
+					await timed("docx/render", () => renderDocx(tree, {
 						title,
 						creator,
 						strictLineBreaks: this.deps.strictLineBreaks ?? this.settings.strictLineBreaksFallback,
@@ -290,9 +291,9 @@ export class DocxCombineRun {
 						properties: fm.properties,
 						...pageDecorations(this.settings, { title, author: creator, date: valueToText(mocFm?.date), combined: true }, this.deps.tocLabel),
 						...styleOptions(this.settings, this.deps),
-					}),
+					})),
 				);
-				file = await writeWithConflictPolicy(group.output, bytes, this.settings.onConflict, this.deps, signal, "docx");
+				file = await timed("docx/write", () => writeWithConflictPolicy(group.output, bytes, this.settings.onConflict, this.deps, signal, "docx"));
 			} catch (error) {
 				file = { output: group.output, kind: "docx", status: "failed", reason: error instanceof Error ? error.message : String(error) };
 			}

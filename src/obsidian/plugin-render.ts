@@ -9,6 +9,7 @@ import { cssColorToHex } from "../core/css-color";
 import { texToSvg } from "../core/math-svg";
 import type { ImageAsset } from "../core/obsidian-syntax";
 import { loadImage } from "./vault-env";
+import { timed } from "../core/profile";
 
 /** 0.5 秒続けて DOM が変わらなければ描画が終わったとみなす。1 依頼の上限は 10 秒（フェーズ 3b の決定事項）。 */
 const QUIET_MS = 500;
@@ -60,15 +61,15 @@ async function renderBlock(app: App, lang: string, source: string, sourcePath: s
 	try {
 		const longest = Math.max(0, ...(source.match(/`+/g) ?? []).map((m) => m.length));
 		const fence = "`".repeat(Math.max(3, longest + 1));
-		await MarkdownRenderer.render(app, `${fence}${lang}\n${source}\n${fence}`, host, sourcePath, component);
-		await waitForQuiet(host, signal);
+		await timed("plugin/markdownRender", () => MarkdownRenderer.render(app, `${fence}${lang}\n${source}\n${fence}`, host, sourcePath, component));
+		await timed("plugin/waitForQuiet", () => waitForQuiet(host, signal));
 		// Dataview のエラー（JavaScript のクエリが無効、クエリの誤りなど）は、描画できなかったとして原文を残し、その文を警告にする
 		const error = host.querySelector(".dataview-error");
 		if (error) throw new Error((error.textContent ?? "").trim() || "Dataview error");
 		if (isPlainCode(host)) return null;
 		// Dataview の表の見出しの後ろに小さく出る件数（`<span class="dataview small-text">2</span>`）は見出しの文字ではないので外す
 		for (const count of Array.from(host.querySelectorAll("th .dataview.small-text"))) count.remove();
-		return await domToMdast(host, { image: (el) => rasterize(el as unknown as Element) });
+		return await timed("plugin/domToMdast", () => domToMdast(host, { image: (el) => timed("plugin/rasterize", () => rasterize(el as unknown as Element)) }));
 	} finally {
 		component.unload();
 		host.remove();
@@ -171,7 +172,7 @@ function inlineUses(svg: SVGSVGElement): void {
 
 /** 数式を SVG の画像にする。Obsidian 同梱の MathJax は CHTML 出力だけなので、プラグインに含めた MathJax を使う。 */
 async function renderMath(latex: string, display: boolean): Promise<ImageAsset> {
-	return loadImage(new TextEncoder().encode(texToSvg(latex, display).svg), "svg");
+	return timed("asset/renderMath", () => loadImage(new TextEncoder().encode(texToSvg(latex, display).svg), "svg"));
 }
 
 const MIME_EXTENSIONS: Record<string, string> = {
@@ -185,7 +186,7 @@ const MIME_EXTENSIONS: Record<string, string> = {
 };
 
 async function fetchImage(url: string): Promise<ImageAsset> {
-	const response = await requestUrl({ url, throw: false });
+	const response = await timed("asset/fetchImage/request", () => requestUrl({ url, throw: false }));
 	if (response.status >= 400) throw new Error(`HTTP ${response.status}`);
 	const bytes = new Uint8Array(response.arrayBuffer);
 	if (bytes.byteLength > MAX_DOWNLOAD_BYTES) throw new Error(`larger than ${MAX_DOWNLOAD_BYTES / 1024 / 1024} MB`);

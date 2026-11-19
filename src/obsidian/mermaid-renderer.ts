@@ -4,6 +4,7 @@ import { apiVersion, loadMermaid } from "obsidian";
 import type { MermaidRenderer, RenderedDiagram } from "../core/mermaid-export";
 import type { MermaidRenderParams } from "../core/mermaid";
 import { resolveCssVariables } from "../core/svg-css";
+import { timed } from "../core/profile";
 
 /**
  * SVG の作り方の版。キャッシュのキー（mermaid.js のバージョン）に足して、作り方を変えたときに古いキャッシュを使わないようにする。
@@ -31,7 +32,7 @@ async function renderDiagram(mermaid: MermaidApi, source: string, params: Mermai
 	const id = `batch-office-export-${++counter}`;
 	let raw: string;
 	try {
-		raw = (await mermaid.render(id, source)).svg;
+		raw = (await timed("mermaid/render", () => mermaid.render(id, source))).svg;
 	} finally {
 		// mermaid が描画用に一時的に作った要素を片付ける（失敗したときに残ることがある）
 		activeDocument.getElementById(id)?.remove();
@@ -43,7 +44,7 @@ async function renderDiagram(mermaid: MermaidApi, source: string, params: Mermai
 	if (!needPng) return { svg, png: null };
 	try {
 		// PNG の背景は canvas で塗る（透過のオプションがあるため、背景なしの SVG から描く）
-		return { svg, png: await svgToPng(plainSvg, width, height, params) };
+		return { svg, png: await timed("mermaid/svgToPng", () => svgToPng(plainSvg, width, height, params)) };
 	} catch (error) {
 		// tainted canvas（SecurityError）など。SVG だけを返す
 		return { svg, png: null, pngError: error instanceof Error ? `${error.name}: ${error.message}` : String(error) };
@@ -75,7 +76,7 @@ function normalizeSvg(raw: string): { svg: string; plainSvg: string; width: numb
 async function svgToPng(svg: string, width: number, height: number, params: MermaidRenderParams): Promise<Uint8Array> {
 	const img = new Image();
 	img.src = `data:image/svg+xml;charset=utf-8,${encodeURIComponent(svg)}`;
-	await img.decode();
+	await timed("mermaid/svgToPng/decode", () => img.decode());
 	const scale = params.dpi / 96;
 	const canvas = createEl("canvas");
 	canvas.width = Math.ceil(width * scale);
@@ -87,12 +88,12 @@ async function svgToPng(svg: string, width: number, height: number, params: Merm
 		ctx.fillRect(0, 0, canvas.width, canvas.height);
 	}
 	ctx.drawImage(img, 0, 0, canvas.width, canvas.height);
-	const blob = await new Promise<Blob>((resolve, reject) => {
+	const blob = await timed("mermaid/svgToPng/toBlob", () => new Promise<Blob>((resolve, reject) => {
 		try {
 			canvas.toBlob((b) => (b ? resolve(b) : reject(new Error("toBlob returned null"))), "image/png");
 		} catch (error) {
 			reject(error instanceof Error ? error : new Error(String(error)));
 		}
-	});
+	}));
 	return new Uint8Array(await blob.arrayBuffer());
 }
