@@ -14,7 +14,7 @@ type FontPair = readonly ["bodyFontEastAsia", "bodyFontLatin"] | readonly ["head
 /** 複数行の入力欄で、1 行に 1 つずつ書く項目（値は文字列の配列） */
 const LINE_LIST_KEYS: ReadonlySet<string> = new Set<SettingKey>(["includeGlobs", "excludeGlobs"]);
 /** 数値の入力欄の項目（値が文字列で届いても数値にする） */
-const NUMBER_KEYS: ReadonlySet<string> = new Set<SettingKey>(["timeoutSeconds", "pngDpi", "pdfScale"]);
+const NUMBER_KEYS: ReadonlySet<string> = new Set<SettingKey>(["timeoutSeconds", "pngDpi", "pdfScale", "pdfFontSizePt"]);
 /** 入力中の値をそのまま持つ項目（形は画面を閉じるときに整える: hide） */
 const RAW_TEXT_KEYS: ReadonlySet<string> = new Set<SettingKey>(["outputRoot"]);
 
@@ -167,6 +167,9 @@ export class BatchOfficeExportSettingTab extends PluginSettingTab {
 					}),
 					this.marginsRow("pdfMarginsMm"),
 					{ name: t("settings.pdfScale.name"), desc: t("settings.pdfScale.desc"), control: { type: "number", key: "pdfScale", min: 10, max: 200, step: 1 } },
+					{ name: t("settings.pdfFontSize.name"), desc: t("settings.pdfFontSize.desc"), control: { type: "number", key: "pdfFontSizePt", min: 6, max: 24, step: 0.5 } },
+					{ name: t("settings.pdfFont.name"), desc: t("settings.pdfFont.desc"), control: { type: "text", key: "pdfFontFamily", placeholder: t("settings.pdfFont.placeholder") } },
+					{ name: t("settings.pdfCodeFont.name"), desc: t("settings.pdfCodeFont.desc"), control: { type: "text", key: "pdfCodeFontFamily", placeholder: t("settings.pdfFont.placeholder") } },
 				],
 			},
 		];

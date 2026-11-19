@@ -5,7 +5,7 @@
 // 表紙は本文と別に印刷し（ヘッダー・フッターを付けないため）、pdf-postprocess で本文の先頭に差し込む。
 import { Component, MarkdownRenderer, TFile, type App } from "obsidian";
 import { obsidianOpenUri } from "../core/note-assembly";
-import { headingKey, headingOfSubpath, pdfPrintableHeightPx, pdfRelativePath, type PdfPageOptions } from "../core/pdf-export";
+import { headingKey, headingOfSubpath, pdfPrintableHeightPx, pdfPrintableWidthPx, pdfRelativePath, tableZoom, type PdfPageOptions } from "../core/pdf-export";
 import { pdfLinkHref, postprocessPdf } from "../core/pdf-postprocess";
 import type { OutputRef, Warning } from "../core/types";
 import { isRenderableLanguage, waitForQuiet } from "./plugin-render";
@@ -16,6 +16,14 @@ const ROOT_CLASS = "batch-office-export-pdf-root";
 const CHAPTER_CLASS = "batch-office-export-pdf-chapter";
 const CHAPTER_TITLE_CLASS = "batch-office-export-pdf-chapter-title";
 const HIDDEN_CLASS = "batch-office-export-pdf-hidden";
+/** ページの先頭に来る要素（上の余白を 0 にする） */
+const FIRST_BLOCK_CLASS = "batch-office-export-pdf-first";
+/** 表を折り返さずに並べたときの幅を測る */
+const MEASURE_CLASS = "batch-office-export-pdf-measure";
+/** 縮小しても収まらない表（列の最小の幅を外す） */
+const COMPACT_TABLE_CLASS = "batch-office-export-pdf-compact-table";
+/** 列の最小の幅を外しても収まらない表（セルの中を文字の途中でも折り返す） */
+const WRAP_ANYWHERE_CLASS = "batch-office-export-pdf-wrap-anywhere";
 
 export interface PdfPrintJob {
 	/** この PDF の出力先（別の PDF への相対リンクの起点） */
@@ -35,6 +43,8 @@ export interface PdfPrintJob {
 	headerTitle: boolean;
 	footerPageNumber: boolean;
 	page: PdfPageOptions;
+	/** 本文の文字（フォント・大きさ）の CSS の変数（core/pdf-export.ts の pdfTextCssProps） */
+	textCss: Record<string, string>;
 	/** BCP 47 の言語タグ */
 	lang: string;
 	/** ノートが入る別の PDF の出力先。PDF にならないノートなら null（リンクは文字だけ） */
@@ -92,7 +102,12 @@ async function printNow(app: App, job: PdfPrintJob): Promise<PdfPrintResult> {
 	const doc = activeDocument;
 	const root = doc.body.createDiv({ cls: ["print", ROOT_CLASS] });
 	// 画像・図の最大の高さ（styles.css で使う）
-	root.setCssProps({ "--batch-office-export-pdf-max-height": `${pdfPrintableHeightPx(job.page)}px` });
+	root.setCssProps({
+		"--batch-office-export-pdf-max-height": `${pdfPrintableHeightPx(job.page)}px`,
+		// 描くときの幅を印字領域の幅にする（表の幅を印刷のときと同じ条件で測る）
+		"--batch-office-export-pdf-width": `${pdfPrintableWidthPx(job.page)}px`,
+		...job.textCss,
+	});
 	const component = new Component();
 	component.load();
 	try {
@@ -111,7 +126,7 @@ async function printNow(app: App, job: PdfPrintJob): Promise<PdfPrintResult> {
 			if (!(file instanceof TFile)) throw new Error(`not found: ${chapter.notePath}`);
 			const el = view.createDiv({ cls: CHAPTER_CLASS });
 			el.id = `boe-ch${index + 1}`;
-			if (job.combined) el.createEl("h1", { text: chapter.title, cls: CHAPTER_TITLE_CLASS, attr: { id: `${el.id}-title` } });
+			if (job.combined) el.createEl("h1", { text: chapter.title, cls: [CHAPTER_TITLE_CLASS, FIRST_BLOCK_CLASS], attr: { id: `${el.id}-title` } });
 			const body = el.createDiv();
 			const markdown = await app.vault.cachedRead(file);
 			await timed("pdf/markdownRender", () => MarkdownRenderer.render(app, markdown, body, chapter.notePath, component));
@@ -141,6 +156,11 @@ async function printNow(app: App, job: PdfPrintJob): Promise<PdfPrintResult> {
 		}
 
 		for (const { notePath, el } of chapterEls) rewriteLinks(app, el, notePath, job, chapterIds, headingIds);
+		for (const { el } of chapterEls) {
+			// 結合出力では、章の題がページの先頭に来る
+			if (!job.combined) markFirstBlock(el);
+			fitWideTables(el);
+		}
 		if (toc) renderToc(toc, view, job.tocLabel ?? "");
 
 		const contents = currentWebContents();
@@ -166,8 +186,8 @@ async function printNow(app: App, job: PdfPrintJob): Promise<PdfPrintResult> {
 			displayHeaderFooter: decorated,
 			...(decorated
 				? {
-						headerTemplate: job.headerTitle ? label(escapeHtml(job.title)) : "<span></span>",
-						footerTemplate: job.footerPageNumber ? label('<span class="pageNumber"></span> / <span class="totalPages"></span>') : "<span></span>",
+						headerTemplate: job.headerTitle ? label(escapeHtml(job.title), job.textCss) : "<span></span>",
+						footerTemplate: job.footerPageNumber ? label('<span class="pageNumber"></span> / <span class="totalPages"></span>', job.textCss) : "<span></span>",
 					}
 				: {}),
 		}));
@@ -181,6 +201,34 @@ async function printNow(app: App, job: PdfPrintJob): Promise<PdfPrintResult> {
 	} finally {
 		component.unload();
 		root.remove();
+	}
+}
+
+/** 本文の最初の見える要素に印を付ける（上の余白を 0 にする: styles.css）。frontmatter などの隠れた要素は飛ばす。 */
+function markFirstBlock(container: HTMLElement): void {
+	const first = Array.from(container.children).find((child): child is HTMLElement => child.instanceOf(HTMLElement) && child.offsetHeight > 0);
+	first?.addClass(FIRST_BLOCK_CLASS);
+}
+
+/**
+ * 印字領域に収まらない表を縮小する（H1-PDF）。列の多い表がページの右端で切れないようにする。
+ * 1. 表を折り返さずに並べたときの幅（max-content）が収まる倍率まで縮小する（MIN_TABLE_ZOOM まで）
+ * 2. それでもはみ出すときだけ、列の最小の幅（Obsidian の `--table-column-min-width`）を外す
+ * 3. それでもはみ出すときだけ、セルの中を文字の途中でも折り返す
+ */
+function fitWideTables(container: HTMLElement): void {
+	for (const table of Array.from(container.querySelectorAll<HTMLElement>("table"))) {
+		const available = table.parentElement?.clientWidth ?? container.clientWidth;
+		table.addClass(MEASURE_CLASS);
+		const natural = table.scrollWidth;
+		table.removeClass(MEASURE_CLASS);
+		const zoom = tableZoom(natural, available);
+		if (zoom === 1) continue;
+		table.setCssProps({ zoom: String(zoom) });
+		for (const cls of [COMPACT_TABLE_CLASS, WRAP_ANYWHERE_CLASS]) {
+			if (table.getBoundingClientRect().width <= available + 1) break;
+			table.addClass(cls);
+		}
 	}
 }
 
@@ -257,8 +305,11 @@ function renderToc(toc: HTMLElement, view: HTMLElement, label: string): void {
 	}
 }
 
-function label(html: string): string {
-	return `<div style="font-size:9px;width:100%;text-align:center;color:#555;">${html}</div>`;
+/** ヘッダー・フッターの文字。本文と同じフォントにする（ヘッダー・フッターは別の文書として描かれ、ページの CSS が効かない） */
+function label(html: string, textCss: Readonly<Record<string, string>>): string {
+	const font = textCss["--batch-office-export-pdf-font"];
+	const family = font ? `font-family:${escapeHtml(font)};` : "";
+	return `<div style="${family}font-size:9px;width:100%;text-align:center;color:#555;">${html}</div>`;
 }
 
 function escapeHtml(text: string): string {

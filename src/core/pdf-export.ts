@@ -81,6 +81,25 @@ export function pdfPageOptions(settings: Pick<PluginSettings, "pdfPaperSize" | "
 	};
 }
 
+/** CSS の 1pt（px）。 */
+const CSS_PX_PER_PT = 96 / 72;
+
+/**
+ * PDF の本文の文字の設定を、印刷する要素に付ける CSS の変数にする（H1-PDF）。
+ * styles.css が、読みモードの本文・コードにこの変数のフォントと大きさを使う。
+ * Obsidian の変数（`--font-text`・`--font-monospace`・`--font-text-size`）も上書きし、変数で描く部品（コールアウトなど）にも効かせる。
+ * フォントが空なら Obsidian のフォントのまま。
+ */
+export function pdfTextCssProps(settings: Pick<PluginSettings, "pdfFontFamily" | "pdfCodeFontFamily" | "pdfFontSizePt">): Record<string, string> {
+	const size = `${Math.round(settings.pdfFontSizePt * CSS_PX_PER_PT * 100) / 100}px`;
+	return {
+		"--batch-office-export-pdf-font-size": size,
+		"--font-text-size": size,
+		...(settings.pdfFontFamily ? { "--batch-office-export-pdf-font": settings.pdfFontFamily, "--font-text": settings.pdfFontFamily } : {}),
+		...(settings.pdfCodeFontFamily ? { "--batch-office-export-pdf-code-font": settings.pdfCodeFontFamily, "--font-monospace": settings.pdfCodeFontFamily } : {}),
+	};
+}
+
 /** CSS の 1 インチ（px）。 */
 const CSS_PX_PER_INCH = 96;
 /** 画像・図の最大の高さの、印字領域の高さに対する割合。 */
@@ -111,4 +130,23 @@ export function headingOfSubpath(subpath: string): string | null {
 /** 見出しの名前の比べ方（Obsidian のリンクは大文字・小文字と前後の空白を区別しない）。 */
 export function headingKey(text: string): string {
 	return text.trim().replace(/\s+/g, " ").toLowerCase();
+}
+
+/**
+ * 印字領域の幅（CSS px）。印刷のレイアウトの幅 = 用紙の幅 ÷ 拡大率なので、描くときの幅をこれに合わせると、
+ * 画面で測った表の幅が印刷のときと同じになる（収まらない表を縮小する判定に使う）。
+ */
+export function pdfPrintableWidthPx(page: PdfPageOptions): number {
+	const paperWidth = page.landscape ? page.pageSize.height : page.pageSize.width;
+	const inches = paperWidth - page.margins.left - page.margins.right;
+	return Math.max(1, Math.floor((inches * CSS_PX_PER_INCH) / page.scale));
+}
+
+/** 収まらない表を縮小するときの、いちばん小さい倍率（本文 10.5pt なら約 7.4pt）。これより小さくすると読めない。 */
+export const MIN_TABLE_ZOOM = 0.7;
+
+/** 表の縮小の倍率（1 なら縮小しない）。幅が印字領域に収まるようにし、MIN_TABLE_ZOOM より小さくはしない。 */
+export function tableZoom(tableWidthPx: number, availableWidthPx: number): number {
+	if (tableWidthPx <= availableWidthPx + 1 || availableWidthPx <= 0) return 1;
+	return Math.max(MIN_TABLE_ZOOM, Math.floor((availableWidthPx / tableWidthPx) * 1000) / 1000);
 }
