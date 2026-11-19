@@ -1,8 +1,22 @@
 // 設定画面（G5）。項目の一覧と既定値は docs/design/settings.md に従う。
-import { App, PluginSettingTab, Setting } from "obsidian";
+// Obsidian 1.13 からの宣言型の設定 API（getSettingDefinitions）で作る。項目が Obsidian の設定の検索に出る。
+// 値の読み書きは getControlValue / setControlValue に集め、保存するときは normalizeSettings で形をそろえる。
+// 1 行に入力欄が複数ある項目（出力形式・余白・フォント）は render で組み立てる。
+import { App, PluginSettingTab, type Setting, type SettingDefinition, type SettingDefinitionItem } from "obsidian";
 import { DEFAULT_SETTINGS, OUTPUT_FORMATS, normalizeSettings, parseLines, type PluginSettings } from "../core/settings";
 import { t } from "../i18n";
 import type BatchOfficeExportPlugin from "../main";
+
+type SettingKey = keyof PluginSettings;
+type MarginKey = "marginsMm" | "pdfMarginsMm";
+type FontPair = readonly ["bodyFontEastAsia", "bodyFontLatin"] | readonly ["headingFontEastAsia", "headingFontLatin"];
+
+/** 複数行の入力欄で、1 行に 1 つずつ書く項目（値は文字列の配列） */
+const LINE_LIST_KEYS: ReadonlySet<string> = new Set<SettingKey>(["includeGlobs", "excludeGlobs"]);
+/** 数値の入力欄の項目（値が文字列で届いても数値にする） */
+const NUMBER_KEYS: ReadonlySet<string> = new Set<SettingKey>(["timeoutSeconds", "pngDpi", "pdfScale"]);
+/** 入力中の値をそのまま持つ項目（形は画面を閉じるときに整える: hide） */
+const RAW_TEXT_KEYS: ReadonlySet<string> = new Set<SettingKey>(["outputRoot"]);
 
 export class BatchOfficeExportSettingTab extends PluginSettingTab {
 	constructor(
@@ -12,318 +26,163 @@ export class BatchOfficeExportSettingTab extends PluginSettingTab {
 		super(app, plugin);
 	}
 
-	override display(): void {
-		const { containerEl } = this;
-		containerEl.empty();
-		const s = this.plugin.settings;
-		const save = async <K extends keyof PluginSettings>(key: K, value: PluginSettings[K]): Promise<void> => {
-			// 値の形は normalizeSettings でそろえる（壊れた値は既定値に戻る）
-			this.plugin.settings = normalizeSettings({ ...this.plugin.settings, [key]: value });
-			await this.plugin.saveSettings();
-		};
-
-		// 出力
-		new Setting(containerEl).setName(t("settings.heading.output")).setHeading();
-		const formats = new Setting(containerEl).setName(t("settings.defaultFormats.name")).setDesc(t("settings.defaultFormats.desc"));
-		for (const format of OUTPUT_FORMATS) {
-			formats.addToggle((tg) => {
-				tg.setTooltip(t(`format.${format}`))
-					.setValue(s.defaultFormats.includes(format))
-					.onChange(async (v) => {
-						const current = new Set(this.plugin.settings.defaultFormats);
-						if (v) current.add(format);
-						else current.delete(format);
-						// 全部外したときは既定値（Word）に戻る（normalizeSettings）
-						await save("defaultFormats", OUTPUT_FORMATS.filter((f) => current.has(f)));
-					});
-				tg.toggleEl.insertAdjacentText("beforebegin", t(`format.${format}`));
-			});
-		}
-		new Setting(containerEl)
-			.setName(t("settings.outputLocation.name"))
-			.setDesc(t("settings.outputLocation.desc"))
-			.addDropdown((d) =>
-				d
-					.addOption("vault", t("settings.outputLocation.vault"))
-					.addOption("external", t("settings.outputLocation.external"))
-					.setValue(s.outputLocation)
-					.onChange(async (v) => {
-						await save("outputLocation", v as PluginSettings["outputLocation"]);
-						this.display();
+	override getSettingDefinitions(): SettingDefinitionItem[] {
+		const outputInVault = (): boolean => this.plugin.settings.outputLocation === "vault";
+		return [
+			{
+				type: "group",
+				heading: t("settings.heading.output"),
+				items: [
+					this.defaultFormatsRow(),
+					dropdown("outputLocation", t("settings.outputLocation.name"), t("settings.outputLocation.desc"), {
+						vault: t("settings.outputLocation.vault"),
+						external: t("settings.outputLocation.external"),
 					}),
-			);
-		if (s.outputLocation === "vault") {
-			new Setting(containerEl)
-				.setName(t("settings.outputRoot.name"))
-				.setDesc(t("settings.outputRoot.desc"))
-				.addText((text) =>
-					text
-						.setPlaceholder(DEFAULT_SETTINGS.outputRoot)
-						.setValue(s.outputRoot)
-						.onChange(async (v) => {
-							// 入力中の値はそのまま持ち、保存するときに形を整える
-							this.plugin.settings.outputRoot = v;
-							await this.plugin.saveSettings();
-						}),
-				);
-		} else {
-			new Setting(containerEl)
-				.setName(t("settings.externalOutputRoot.name"))
-				.setDesc(t("settings.externalOutputRoot.desc"))
-				.addText((text) => text.setValue(s.externalOutputRoot).onChange(async (v) => save("externalOutputRoot", v)));
-		}
-		new Setting(containerEl)
-			.setName(t("settings.saveMode.name"))
-			.setDesc(t("settings.saveMode.desc"))
-			.addDropdown((d) =>
-				d
-					.addOption("mirror", t("settings.saveMode.mirror"))
-					.addOption("sameFolder", t("settings.saveMode.sameFolder"))
-					.setValue(s.saveMode)
-					.onChange(async (v) => save("saveMode", v as PluginSettings["saveMode"])),
-			);
-		new Setting(containerEl).setName(t("settings.onConflict.name")).addDropdown((d) =>
-			d
-				.addOption("overwrite", t("settings.onConflict.overwrite"))
-				.addOption("skip", t("settings.onConflict.skip"))
-				.addOption("rename", t("settings.onConflict.rename"))
-				.setValue(s.onConflict)
-				.onChange(async (v) => save("onConflict", v as PluginSettings["onConflict"])),
-		);
+					{
+						name: t("settings.outputRoot.name"),
+						desc: t("settings.outputRoot.desc"),
+						visible: outputInVault,
+						control: { type: "text", key: "outputRoot", placeholder: DEFAULT_SETTINGS.outputRoot },
+					},
+					{
+						name: t("settings.externalOutputRoot.name"),
+						desc: t("settings.externalOutputRoot.desc"),
+						visible: () => !outputInVault(),
+						control: { type: "text", key: "externalOutputRoot" },
+					},
+					dropdown("saveMode", t("settings.saveMode.name"), t("settings.saveMode.desc"), {
+						mirror: t("settings.saveMode.mirror"),
+						sameFolder: t("settings.saveMode.sameFolder"),
+					}),
+					dropdown("onConflict", t("settings.onConflict.name"), undefined, {
+						overwrite: t("settings.onConflict.overwrite"),
+						skip: t("settings.onConflict.skip"),
+						rename: t("settings.onConflict.rename"),
+					}),
+				],
+			},
+			{
+				type: "group",
+				heading: t("settings.heading.targets"),
+				items: [
+					{ name: t("settings.includeGlobs.name"), desc: t("settings.includeGlobs.desc"), control: { type: "textarea", key: "includeGlobs" } },
+					{ name: t("settings.excludeGlobs.name"), desc: t("settings.excludeGlobs.desc"), control: { type: "textarea", key: "excludeGlobs" } },
+				],
+			},
+			{
+				type: "group",
+				heading: t("settings.heading.run"),
+				items: [
+					dropdown("onError", t("settings.onError.name"), undefined, {
+						continue: t("settings.onError.continue"),
+						failFast: t("settings.onError.failFast"),
+					}),
+					{ name: t("settings.timeout.name"), control: { type: "number", key: "timeoutSeconds", min: 1, step: 1 } },
+				],
+			},
+			{
+				type: "group",
+				heading: t("settings.heading.mermaid"),
+				items: [
+					dropdown("mermaidImageFormat", t("settings.imageFormat.name"), undefined, { png: "PNG", svg: "SVG", both: t("settings.imageFormat.both") }),
+					{ name: t("settings.pngDpi.name"), control: { type: "number", key: "pngDpi", min: 1, step: 1 } },
+					toggle("pngTransparentBackground", t("settings.transparent.name")),
+					{ name: t("settings.font.name"), desc: t("settings.font.desc"), control: { type: "text", key: "mermaidFontFamily" } },
+					toggle("saveImageFiles", t("settings.saveImageFiles.name"), t("settings.saveImageFiles.desc")),
+				],
+			},
+			{
+				type: "group",
+				heading: t("settings.heading.word"),
+				items: [
+					dropdown("paperSize", t("settings.paperSize.name"), undefined, { A4: "A4", B5: "B5", Letter: "Letter" }),
+					dropdown("orientation", t("settings.orientation.name"), undefined, {
+						portrait: t("settings.orientation.portrait"),
+						landscape: t("settings.orientation.landscape"),
+					}),
+					this.marginsRow("marginsMm"),
+					this.fontRow(t("settings.bodyFont.name"), ["bodyFontEastAsia", "bodyFontLatin"]),
+					this.fontRow(t("settings.headingFont.name"), ["headingFontEastAsia", "headingFontLatin"]),
+					toggle("fileNameAsTitle", t("settings.fileNameAsTitle.name"), t("settings.fileNameAsTitle.desc")),
+					{ name: t("settings.authorName.name"), desc: t("settings.authorName.desc"), control: { type: "text", key: "authorName" } },
+					toggle("strictLineBreaksFallback", t("settings.strictLineBreaks.name"), t("settings.strictLineBreaks.desc")),
+					toggle("codeLineNumbers", t("settings.codeLineNumbers.name")),
+					toggle("keepCommentsAsWordComments", t("settings.keepComments.name"), t("settings.keepComments.desc")),
+					toggle("frontmatterTable", t("settings.frontmatterTable.name"), t("settings.frontmatterTable.desc")),
+					toggle("downloadExternalImages", t("settings.downloadExternalImages.name"), t("settings.downloadExternalImages.desc")),
+					dropdown("calloutColorSource", t("settings.calloutColor.name"), undefined, {
+						fixed: t("settings.calloutColor.fixed"),
+						theme: t("settings.calloutColor.theme"),
+					}),
+					toggle("footerPageNumber", t("settings.footerPageNumber.name"), t("settings.footerPageNumber.desc")),
+					toggle("headerTitle", t("settings.headerTitle.name")),
+					toggle("coverPage", t("settings.coverPage.name"), t("settings.coverPage.desc")),
+					dropdown("tableOfContents", t("settings.tableOfContents.name"), t("settings.tableOfContents.desc"), {
+						never: t("settings.tableOfContents.never"),
+						combined: t("settings.tableOfContents.combined"),
+						always: t("settings.tableOfContents.always"),
+					}),
+					dropdown("combineOrder", t("settings.combineOrder.name"), t("settings.combineOrder.desc"), {
+						fileName: t("settings.combineOrder.fileName"),
+						frontmatterOrder: t("settings.combineOrder.frontmatterOrder"),
+						moc: t("settings.combineOrder.moc"),
+					}),
+					toggle("defaultCombine", t("settings.defaultCombine.name"), t("settings.defaultCombine.desc")),
+					{ name: t("settings.wordTemplatePath.name"), desc: t("settings.wordTemplatePath.desc"), control: { type: "text", key: "wordTemplatePath" } },
+					toggle("headingNumbering", t("settings.headingNumbering.name"), t("settings.headingNumbering.desc")),
+					toggle("pageBreakBeforeH1", t("settings.pageBreakBeforeH1.name")),
+					toggle("tableFullWidth", t("settings.tableFullWidth.name")),
+					toggle("figureCaptions", t("settings.figureCaptions.name"), t("settings.figureCaptions.desc")),
+					toggle("tableCaptions", t("settings.tableCaptions.name"), t("settings.tableCaptions.desc")),
+				],
+			},
+			{
+				type: "group",
+				heading: t("settings.heading.excel"),
+				items: [
+					dropdown("excelBookUnit", t("settings.excelBookUnit.name"), t("settings.excelBookUnit.desc"), {
+						perFolder: t("settings.excelBookUnit.perFolder"),
+						perNote: t("settings.excelBookUnit.perNote"),
+					}),
+					dropdown("excelSheetUnit", t("settings.excelSheetUnit.name"), undefined, {
+						perNote: t("settings.excelSheetUnit.perNote"),
+						perTable: t("settings.excelSheetUnit.perTable"),
+					}),
+					toggle("excelAsTable", t("settings.excelAsTable.name"), t("settings.excelAsTable.desc")),
+					toggle("excelOutlineMode", t("settings.excelOutlineMode.name"), t("settings.excelOutlineMode.desc")),
+					toggle("excelSourceColumns", t("settings.excelSourceColumns.name"), t("settings.excelSourceColumns.desc")),
+				],
+			},
+			{
+				// PDF（H1-PDF）: ページ設定だけ Word と別に持つ
+				type: "group",
+				heading: t("settings.heading.pdf"),
+				items: [
+					// 名前のない説明だけの行。名前が空の項目は描かれないので、render で説明を入れる
+					{ name: t("settings.heading.pdf"), searchable: false, render: (setting: Setting) => void setting.setName("").setDesc(t("settings.pdf.desc")) },
+					dropdown("pdfPaperSize", t("settings.paperSize.name"), undefined, { A4: "A4", A3: "A3", B5: "B5", Letter: "Letter" }),
+					dropdown("pdfOrientation", t("settings.orientation.name"), undefined, {
+						portrait: t("settings.orientation.portrait"),
+						landscape: t("settings.orientation.landscape"),
+					}),
+					this.marginsRow("pdfMarginsMm"),
+					{ name: t("settings.pdfScale.name"), desc: t("settings.pdfScale.desc"), control: { type: "number", key: "pdfScale", min: 10, max: 200, step: 1 } },
+				],
+			},
+		];
+	}
 
-		// 変換対象
-		new Setting(containerEl).setName(t("settings.heading.targets")).setHeading();
-		new Setting(containerEl)
-			.setName(t("settings.includeGlobs.name"))
-			.setDesc(t("settings.includeGlobs.desc"))
-			.addTextArea((a) => a.setValue(s.includeGlobs.join("\n")).onChange(async (v) => save("includeGlobs", parseLines(v))));
-		new Setting(containerEl)
-			.setName(t("settings.excludeGlobs.name"))
-			.setDesc(t("settings.excludeGlobs.desc"))
-			.addTextArea((a) => a.setValue(s.excludeGlobs.join("\n")).onChange(async (v) => save("excludeGlobs", parseLines(v))));
+	override getControlValue(key: string): unknown {
+		const value = (this.plugin.settings as unknown as Record<string, unknown>)[key];
+		return LINE_LIST_KEYS.has(key) && Array.isArray(value) ? value.join("\n") : value;
+	}
 
-		// 実行
-		new Setting(containerEl).setName(t("settings.heading.run")).setHeading();
-		new Setting(containerEl).setName(t("settings.onError.name")).addDropdown((d) =>
-			d
-				.addOption("continue", t("settings.onError.continue"))
-				.addOption("failFast", t("settings.onError.failFast"))
-				.setValue(s.onError)
-				.onChange(async (v) => save("onError", v as PluginSettings["onError"])),
-		);
-		new Setting(containerEl).setName(t("settings.timeout.name")).addText((text) =>
-			text.setValue(String(s.timeoutSeconds)).onChange(async (v) => save("timeoutSeconds", Number(v))),
-		);
-
-		// Mermaid の画像
-		new Setting(containerEl).setName(t("settings.heading.mermaid")).setHeading();
-		new Setting(containerEl).setName(t("settings.imageFormat.name")).addDropdown((d) =>
-			d
-				.addOption("png", "PNG")
-				.addOption("svg", "SVG")
-				.addOption("both", t("settings.imageFormat.both"))
-				.setValue(s.mermaidImageFormat)
-				.onChange(async (v) => save("mermaidImageFormat", v as PluginSettings["mermaidImageFormat"])),
-		);
-		new Setting(containerEl).setName(t("settings.pngDpi.name")).addText((text) => text.setValue(String(s.pngDpi)).onChange(async (v) => save("pngDpi", Number(v))));
-		new Setting(containerEl)
-			.setName(t("settings.transparent.name"))
-			.addToggle((tg) => tg.setValue(s.pngTransparentBackground).onChange(async (v) => save("pngTransparentBackground", v)));
-		new Setting(containerEl)
-			.setName(t("settings.font.name"))
-			.setDesc(t("settings.font.desc"))
-			.addText((text) => text.setValue(s.mermaidFontFamily).onChange(async (v) => save("mermaidFontFamily", v)));
-		new Setting(containerEl)
-			.setName(t("settings.saveImageFiles.name"))
-			.setDesc(t("settings.saveImageFiles.desc"))
-			.addToggle((tg) => tg.setValue(s.saveImageFiles).onChange(async (v) => save("saveImageFiles", v)));
-
-		// Word
-		new Setting(containerEl).setName(t("settings.heading.word")).setHeading();
-		new Setting(containerEl).setName(t("settings.paperSize.name")).addDropdown((d) =>
-			d
-				.addOption("A4", "A4")
-				.addOption("B5", "B5")
-				.addOption("Letter", "Letter")
-				.setValue(s.paperSize)
-				.onChange(async (v) => save("paperSize", v as PluginSettings["paperSize"])),
-		);
-		new Setting(containerEl).setName(t("settings.orientation.name")).addDropdown((d) =>
-			d
-				.addOption("portrait", t("settings.orientation.portrait"))
-				.addOption("landscape", t("settings.orientation.landscape"))
-				.setValue(s.orientation)
-				.onChange(async (v) => save("orientation", v as PluginSettings["orientation"])),
-		);
-		const margin = new Setting(containerEl).setName(t("settings.margins.name"));
-		for (const side of ["top", "bottom", "left", "right"] as const) {
-			margin.addText((text) => {
-				text.inputEl.type = "number";
-				text.inputEl.addClass("batch-office-export-margin-input");
-				text.setValue(String(s.marginsMm[side])).onChange(async (v) => save("marginsMm", { ...this.plugin.settings.marginsMm, [side]: Number(v) }));
-			});
-		}
-		new Setting(containerEl)
-			.setName(t("settings.bodyFont.name"))
-			.addText((text) => text.setValue(s.bodyFontEastAsia).onChange(async (v) => save("bodyFontEastAsia", v)))
-			.addText((text) => text.setValue(s.bodyFontLatin).onChange(async (v) => save("bodyFontLatin", v)));
-		new Setting(containerEl)
-			.setName(t("settings.headingFont.name"))
-			.addText((text) => text.setValue(s.headingFontEastAsia).onChange(async (v) => save("headingFontEastAsia", v)))
-			.addText((text) => text.setValue(s.headingFontLatin).onChange(async (v) => save("headingFontLatin", v)));
-		new Setting(containerEl)
-			.setName(t("settings.fileNameAsTitle.name"))
-			.setDesc(t("settings.fileNameAsTitle.desc"))
-			.addToggle((tg) => tg.setValue(s.fileNameAsTitle).onChange(async (v) => save("fileNameAsTitle", v)));
-		new Setting(containerEl)
-			.setName(t("settings.authorName.name"))
-			.setDesc(t("settings.authorName.desc"))
-			.addText((text) => text.setValue(s.authorName).onChange(async (v) => save("authorName", v)));
-		new Setting(containerEl)
-			.setName(t("settings.strictLineBreaks.name"))
-			.setDesc(t("settings.strictLineBreaks.desc"))
-			.addToggle((tg) => tg.setValue(s.strictLineBreaksFallback).onChange(async (v) => save("strictLineBreaksFallback", v)));
-		new Setting(containerEl)
-			.setName(t("settings.codeLineNumbers.name"))
-			.addToggle((tg) => tg.setValue(s.codeLineNumbers).onChange(async (v) => save("codeLineNumbers", v)));
-		new Setting(containerEl)
-			.setName(t("settings.keepComments.name"))
-			.setDesc(t("settings.keepComments.desc"))
-			.addToggle((tg) => tg.setValue(s.keepCommentsAsWordComments).onChange(async (v) => save("keepCommentsAsWordComments", v)));
-		new Setting(containerEl)
-			.setName(t("settings.frontmatterTable.name"))
-			.setDesc(t("settings.frontmatterTable.desc"))
-			.addToggle((tg) => tg.setValue(s.frontmatterTable).onChange(async (v) => save("frontmatterTable", v)));
-		new Setting(containerEl)
-			.setName(t("settings.downloadExternalImages.name"))
-			.setDesc(t("settings.downloadExternalImages.desc"))
-			.addToggle((tg) => tg.setValue(s.downloadExternalImages).onChange(async (v) => save("downloadExternalImages", v)));
-		new Setting(containerEl).setName(t("settings.calloutColor.name")).addDropdown((d) =>
-			d
-				.addOption("fixed", t("settings.calloutColor.fixed"))
-				.addOption("theme", t("settings.calloutColor.theme"))
-				.setValue(s.calloutColorSource)
-				.onChange(async (v) => save("calloutColorSource", v as PluginSettings["calloutColorSource"])),
-		);
-		new Setting(containerEl)
-			.setName(t("settings.footerPageNumber.name"))
-			.setDesc(t("settings.footerPageNumber.desc"))
-			.addToggle((tg) => tg.setValue(s.footerPageNumber).onChange(async (v) => save("footerPageNumber", v)));
-		new Setting(containerEl).setName(t("settings.headerTitle.name")).addToggle((tg) => tg.setValue(s.headerTitle).onChange(async (v) => save("headerTitle", v)));
-		new Setting(containerEl)
-			.setName(t("settings.coverPage.name"))
-			.setDesc(t("settings.coverPage.desc"))
-			.addToggle((tg) => tg.setValue(s.coverPage).onChange(async (v) => save("coverPage", v)));
-		new Setting(containerEl)
-			.setName(t("settings.tableOfContents.name"))
-			.setDesc(t("settings.tableOfContents.desc"))
-			.addDropdown((d) =>
-				d
-					.addOption("never", t("settings.tableOfContents.never"))
-					.addOption("combined", t("settings.tableOfContents.combined"))
-					.addOption("always", t("settings.tableOfContents.always"))
-					.setValue(s.tableOfContents)
-					.onChange(async (v) => save("tableOfContents", v as PluginSettings["tableOfContents"])),
-			);
-		new Setting(containerEl)
-			.setName(t("settings.combineOrder.name"))
-			.setDesc(t("settings.combineOrder.desc"))
-			.addDropdown((d) =>
-				d
-					.addOption("fileName", t("settings.combineOrder.fileName"))
-					.addOption("frontmatterOrder", t("settings.combineOrder.frontmatterOrder"))
-					.addOption("moc", t("settings.combineOrder.moc"))
-					.setValue(s.combineOrder)
-					.onChange(async (v) => save("combineOrder", v as PluginSettings["combineOrder"])),
-			);
-		new Setting(containerEl)
-			.setName(t("settings.defaultCombine.name"))
-			.setDesc(t("settings.defaultCombine.desc"))
-			.addToggle((tg) => tg.setValue(s.defaultCombine).onChange(async (v) => save("defaultCombine", v)));
-		new Setting(containerEl)
-			.setName(t("settings.wordTemplatePath.name"))
-			.setDesc(t("settings.wordTemplatePath.desc"))
-			.addText((tx) => tx.setValue(s.wordTemplatePath).onChange(async (v) => save("wordTemplatePath", v)));
-		new Setting(containerEl)
-			.setName(t("settings.headingNumbering.name"))
-			.setDesc(t("settings.headingNumbering.desc"))
-			.addToggle((tg) => tg.setValue(s.headingNumbering).onChange(async (v) => save("headingNumbering", v)));
-		new Setting(containerEl).setName(t("settings.pageBreakBeforeH1.name")).addToggle((tg) => tg.setValue(s.pageBreakBeforeH1).onChange(async (v) => save("pageBreakBeforeH1", v)));
-		new Setting(containerEl).setName(t("settings.tableFullWidth.name")).addToggle((tg) => tg.setValue(s.tableFullWidth).onChange(async (v) => save("tableFullWidth", v)));
-		new Setting(containerEl)
-			.setName(t("settings.figureCaptions.name"))
-			.setDesc(t("settings.figureCaptions.desc"))
-			.addToggle((tg) => tg.setValue(s.figureCaptions).onChange(async (v) => save("figureCaptions", v)));
-		new Setting(containerEl)
-			.setName(t("settings.tableCaptions.name"))
-			.setDesc(t("settings.tableCaptions.desc"))
-			.addToggle((tg) => tg.setValue(s.tableCaptions).onChange(async (v) => save("tableCaptions", v)));
-
-		new Setting(containerEl).setName(t("settings.heading.excel")).setHeading();
-		new Setting(containerEl)
-			.setName(t("settings.excelBookUnit.name"))
-			.setDesc(t("settings.excelBookUnit.desc"))
-			.addDropdown((d) =>
-				d
-					.addOption("perFolder", t("settings.excelBookUnit.perFolder"))
-					.addOption("perNote", t("settings.excelBookUnit.perNote"))
-					.setValue(s.excelBookUnit)
-					.onChange(async (v) => save("excelBookUnit", v as PluginSettings["excelBookUnit"])),
-			);
-		new Setting(containerEl).setName(t("settings.excelSheetUnit.name")).addDropdown((d) =>
-			d
-				.addOption("perNote", t("settings.excelSheetUnit.perNote"))
-				.addOption("perTable", t("settings.excelSheetUnit.perTable"))
-				.setValue(s.excelSheetUnit)
-				.onChange(async (v) => save("excelSheetUnit", v as PluginSettings["excelSheetUnit"])),
-		);
-		new Setting(containerEl)
-			.setName(t("settings.excelAsTable.name"))
-			.setDesc(t("settings.excelAsTable.desc"))
-			.addToggle((tg) => tg.setValue(s.excelAsTable).onChange(async (v) => save("excelAsTable", v)));
-		new Setting(containerEl)
-			.setName(t("settings.excelOutlineMode.name"))
-			.setDesc(t("settings.excelOutlineMode.desc"))
-			.addToggle((tg) => tg.setValue(s.excelOutlineMode).onChange(async (v) => save("excelOutlineMode", v)));
-		new Setting(containerEl)
-			.setName(t("settings.excelSourceColumns.name"))
-			.setDesc(t("settings.excelSourceColumns.desc"))
-			.addToggle((tg) => tg.setValue(s.excelSourceColumns).onChange(async (v) => save("excelSourceColumns", v)));
-
-		// PDF（H1-PDF）: ページ設定だけ Word と別に持つ
-		new Setting(containerEl).setName(t("settings.heading.pdf")).setHeading();
-		new Setting(containerEl).setDesc(t("settings.pdf.desc"));
-		new Setting(containerEl).setName(t("settings.paperSize.name")).addDropdown((d) =>
-			d
-				.addOption("A4", "A4")
-				.addOption("A3", "A3")
-				.addOption("B5", "B5")
-				.addOption("Letter", "Letter")
-				.setValue(s.pdfPaperSize)
-				.onChange(async (v) => save("pdfPaperSize", v as PluginSettings["pdfPaperSize"])),
-		);
-		new Setting(containerEl).setName(t("settings.orientation.name")).addDropdown((d) =>
-			d
-				.addOption("portrait", t("settings.orientation.portrait"))
-				.addOption("landscape", t("settings.orientation.landscape"))
-				.setValue(s.pdfOrientation)
-				.onChange(async (v) => save("pdfOrientation", v as PluginSettings["pdfOrientation"])),
-		);
-		const pdfMargin = new Setting(containerEl).setName(t("settings.margins.name"));
-		for (const side of ["top", "bottom", "left", "right"] as const) {
-			pdfMargin.addText((text) => {
-				text.inputEl.type = "number";
-				text.inputEl.addClass("batch-office-export-margin-input");
-				text.setValue(String(s.pdfMarginsMm[side])).onChange(async (v) => save("pdfMarginsMm", { ...this.plugin.settings.pdfMarginsMm, [side]: Number(v) }));
-			});
-		}
-		new Setting(containerEl)
-			.setName(t("settings.pdfScale.name"))
-			.setDesc(t("settings.pdfScale.desc"))
-			.addText((text) => {
-				text.inputEl.type = "number";
-				text.setValue(String(s.pdfScale)).onChange(async (v) => save("pdfScale", Number(v)));
-			});
+	override async setControlValue(key: string, value: unknown): Promise<void> {
+		const stored =
+			LINE_LIST_KEYS.has(key) && typeof value === "string" ? parseLines(value) : NUMBER_KEYS.has(key) && typeof value === "string" ? Number(value) : value;
+		await this.saveValue(key as SettingKey, stored);
+		// 出力先を切り替えると、出す入力欄（Vault の中のフォルダ / Vault の外のフォルダ）が変わる
+		if (key === "outputLocation") this.refreshDomState();
 	}
 
 	override hide(): void {
@@ -331,4 +190,77 @@ export class BatchOfficeExportSettingTab extends PluginSettingTab {
 		this.plugin.settings = normalizeSettings(this.plugin.settings);
 		void this.plugin.saveSettings();
 	}
+
+	private async saveValue(key: SettingKey, value: unknown): Promise<void> {
+		if (RAW_TEXT_KEYS.has(key) && typeof value === "string") {
+			// 入力中の値はそのまま持ち、保存するときに形を整える
+			this.plugin.settings = { ...this.plugin.settings, [key]: value };
+		} else {
+			// 値の形は normalizeSettings でそろえる（壊れた値は既定値に戻る）
+			this.plugin.settings = normalizeSettings({ ...this.plugin.settings, [key]: value });
+		}
+		await this.plugin.saveSettings();
+	}
+
+	/** 出力形式の初期値: 形式ごとのトグルを 1 行に並べる。全部外したときは既定値（Word）に戻る（normalizeSettings） */
+	private defaultFormatsRow(): SettingDefinition {
+		return {
+			name: t("settings.defaultFormats.name"),
+			desc: t("settings.defaultFormats.desc"),
+			render: (setting: Setting) => {
+				for (const format of OUTPUT_FORMATS) {
+					setting.addToggle((tg) => {
+						tg.setTooltip(t(`format.${format}`))
+							.setValue(this.plugin.settings.defaultFormats.includes(format))
+							.onChange(async (v) => {
+								const current = new Set(this.plugin.settings.defaultFormats);
+								if (v) current.add(format);
+								else current.delete(format);
+								await this.saveValue(
+									"defaultFormats",
+									OUTPUT_FORMATS.filter((f) => current.has(f)),
+								);
+							});
+						tg.toggleEl.insertAdjacentText("beforebegin", t(`format.${format}`));
+					});
+				}
+			},
+		};
+	}
+
+	/** 余白（上・下・左・右、mm）を 1 行に並べる */
+	private marginsRow(key: MarginKey): SettingDefinition {
+		return {
+			name: t("settings.margins.name"),
+			render: (setting: Setting) => {
+				for (const side of ["top", "bottom", "left", "right"] as const) {
+					setting.addText((text) => {
+						text.inputEl.type = "number";
+						text.inputEl.addClass("batch-office-export-margin-input");
+						text.setValue(String(this.plugin.settings[key][side])).onChange(async (v) => this.saveValue(key, { ...this.plugin.settings[key], [side]: Number(v) }));
+					});
+				}
+			},
+		};
+	}
+
+	/** フォント（和文・欧文）を 1 行に並べる */
+	private fontRow(name: string, keys: FontPair): SettingDefinition {
+		return {
+			name,
+			render: (setting: Setting) => {
+				for (const key of keys) {
+					setting.addText((text) => text.setValue(this.plugin.settings[key]).onChange(async (v) => this.saveValue(key, v)));
+				}
+			},
+		};
+	}
+}
+
+function toggle(key: SettingKey, name: string, desc?: string): SettingDefinition {
+	return { name, ...(desc ? { desc } : {}), control: { type: "toggle", key } };
+}
+
+function dropdown(key: SettingKey, name: string, desc: string | undefined, options: Record<string, string>): SettingDefinition {
+	return { name, ...(desc ? { desc } : {}), control: { type: "dropdown", key, options } };
 }
