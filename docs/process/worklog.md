@@ -8,6 +8,13 @@
 
 ---
 
+## 2026-11-19 1.1.3 の公開（高速化の対策 3）
+
+- ユーザーの指示（「1.1.3 で公開する」）で、`perf/remaining` を `main` にマージ（`cb73b7a`）し、版を上げた（`ceaf062`）
+- 確認: `npm run lint`（エラー 0、警告 8 は以前のまま）・`npm run notices:check`・単体テスト 299 件・本番ビルド 3.82 MB。自動レビューの対象の文字列（`createElement("script")`・`new Function`・`manifest.json`・`main.js`）と開発用の自動実行は本番ビルドで 0 件
+- 公開: `main` とタグ `1.1.3` を push し、GitHub Release 1.1.3 に `main.js`・`manifest.json`・`styles.css` を添付した。添付した 3 つは手元の本番ビルドと同じ（SHA-256 で確認）。リリースノートは英語（Word 3.5 s → 2.3 s、Excel 3.0 s → 1.6 s、PDF 21 s → 17 s）
+- テスト用 Vault は開発用ビルドに戻した
+
 ## 2026-11-19 残りの高速化の候補をすべて試す（A-24・H1-PDF・高速化の対策 3）
 
 - きっかけ: ユーザーから「全部の高速化を試して」。1.1.2 の時点の内訳を測り直し、残りの候補を洗い出して試した（候補ごとの結果は `docs/design/performance.md` の「対策 3」）
