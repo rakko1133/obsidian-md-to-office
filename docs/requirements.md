@@ -855,12 +855,19 @@ R1 で生成する Mermaid 画像の品質と、Word への埋め込み方法を
 #### 文書プロパティ
 - PDF のタイトル・作成者を、C-8 と同じ決め方（frontmatter の `title` / `author`、なければ設定の作成者名）で入れる。OS のユーザー名や Vault の絶対パスは入れない（R3 の設計原則）
 
-#### 実装メモ（要検証）
-- `printToPDF` の呼び方: Obsidian の公開 API にはない。Electron の API に触れる部分を 1 か所に閉じ込め、コミュニティの自動レビュー（G1）で指摘されないかを最初に確かめる。プラグインからの呼び方（今のウィンドウの `webContents` に印刷用の要素を描くか、画面に出さない別のウィンドウを作るか）は、Obsidian 標準の PDF エクスポートの実装を参考に決める
-- `generateDocumentOutline` が Obsidian 1.15.1（`minAppVersion`）に同梱の Electron で使えるか
-- 表紙のページだけヘッダー・フッターを出さない方法: `printToPDF` のテンプレートは全ページに付くため、表紙と本文を別々に PDF にして結合するなどの方法を検討する。PDF の結合やプロパティの書き込みに `pdf-lib`（MIT）などの依存を足す場合は、その時点でユーザーに確認する
-- 別の PDF への相対リンクが、Chromium の PDF 出力で正しいリンクとして残るか
-- 大きなフォルダの結合出力で、1 つの HTML に描画してもメモリと時間が足りるか（R3 の中断・進捗表示と合わせて確認）
+#### 実装メモ（試作で確認・2026-11-19）
+試作は `src/obsidian/pdf-prototype.ts`（開発用ビルドだけ。`npm run obsidian:run -- --mode pdf`）。Obsidian 1.15.1（Electron 43.8.9・Chromium 150）で確かめた。
+- 呼び方（確認済み）: `require("electron").remote.getCurrentWebContents().printToPDF()` で今のウィンドウから PDF を作れる。Obsidian 本体の印刷用 CSS は「`body` 直下の `.print` 以外を隠す」作りなので、`.print` の中に `MarkdownRenderer.render()` で読みモードの HTML を描いてから呼ぶ。`ipcRenderer` と `<webview>` の `printToPDF` もあるが使わない
+- 描画（確認済み）: 数式・Dataview（dataviewjs を含む）・Mermaid・画像・コールアウトが Obsidian の表示どおりに入る。印刷の間だけ `body` を `theme-light` にした。時間は 1 ノート約 0.6〜1.2 秒、7 ページの結合出力で約 3 秒
+- しおり（確認済み）: `generateDocumentOutline` で見出しがしおりになる。結合出力では、章の題（ノート名）とノートの中の H1 が同じ 1 段目に並ぶ。ノート名を 1 段目にするには、見出しの段を 1 つずつ下げる工夫が要る（未解決）
+- PDF 内リンク・目次（確認済み）: 見出しに `id` を付けて `href="#id"` にすると、PDF の中のページへのリンクになる
+- フッターのページ番号・ヘッダーのタイトル（確認済み）: `footerTemplate` / `headerTemplate` で出る
+- 文書プロパティ: タイトルは印刷の間だけ `document.title` を変えると入る。作成者は `printToPDF` では入れられない
+- 表紙のページだけヘッダー・フッターを出さない: **できなかった**。`@page :first { margin: 0 }` でも、余白を CSS だけで指定（`preferCSSPageSize`）しても、表紙にフッターが出る
+- 別の PDF への相対リンク: **できなかった**。Chromium が `app://obsidian.md/{名前}.pdf` という絶対 URL に変えてしまう
+- 上の 2 つと作成者は、`printToPDF` で作った PDF を後から書き換えれば解決できる（表紙と本文を別々に作って結合する、リンクの URI を相対パスに書き換える、作成者を入れる）。そのためには PDF を扱うライブラリ（`pdf-lib`、MIT など）の追加が要る（ユーザーの判断待ち）
+- 自動レビュー（G1）: 公式の ESLint の推奨設定では、`electron` の `remote` の利用は指摘されなかった。実行時に `<style>` 要素を作るとエラーになるので、CSS は `styles.css` に置く。登録後の自動レビューでの扱いは、出してみるまで分からない
+- 未確認: 印刷の間に `theme-light` へ切り替えたとき画面がちらつくか、`[[ノート#^ブロックID]]` のリンク、大きなフォルダの結合出力でのメモリと時間（R3 の中断・進捗表示と合わせて確認）
 
 #### 後回し
 - [ ] 目次のページ番号
