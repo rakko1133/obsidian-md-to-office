@@ -32,6 +32,7 @@ import { useLightTheme } from "./pdf-print";
 import { createVaultEnvironment } from "./vault-env";
 import { ProgressNotice } from "./progress";
 import { showReport } from "./report-modal";
+import { startProfiling, stopProfiling, timed, timedSync, type Profiler } from "../core/profile";
 
 /** office は「確認画面で形式を選ぶ」（初期値は設定 defaultFormats: R8）。both は Word と Excel */
 export type ExportMode = "mermaid" | "docx" | "xlsx" | "pdf" | "both" | "summary" | "office";
@@ -262,12 +263,16 @@ export interface AutoRunOptions {
 	settings?: Partial<PluginSettings>;
 	/** 1 フォルダを 1 つの .docx にまとめる（C-8） */
 	combine?: boolean;
+	/** 処理時間を計測して、結果に付ける（高速化の検討） */
+	profile?: boolean;
 }
 
 export interface RunReport {
 	end: RunOutcomeEnd;
 	results: NoteResult[];
 	runWarnings: Warning[];
+	/** 処理時間の集計（AutoRunOptions.profile のときだけ） */
+	profile?: ReturnType<Profiler["report"]>;
 }
 
 type RunOutcomeEnd = Awaited<ReturnType<typeof runSequential>>["end"];
@@ -299,9 +304,12 @@ export async function runExport(host: ExportHost, mode: ExportMode, source: Targ
 		return null;
 	}
 
+	// 計測（開発用）は対象の収集から始める
+	const profiler = auto?.profile ? startProfiling() : null;
 	// 01: 変換対象の収集
-	const { targets, excluded } = filterTargets(collectCandidates(app, source), settings.includeGlobs, settings.excludeGlobs);
+	const { targets, excluded } = timedSync("run/collect", () => filterTargets(collectCandidates(app, source), settings.includeGlobs, settings.excludeGlobs));
 	if (targets.length === 0) {
+		if (profiler) stopProfiling();
 		new Notice(t("notice.noTargets", { excluded: String(excluded.length) }));
 		return null;
 	}
@@ -317,7 +325,7 @@ export async function runExport(host: ExportHost, mode: ExportMode, source: Targ
 
 		let renderer;
 		try {
-			renderer = await createMermaidRenderer();
+			renderer = await timed("run/createRenderer", () => createMermaidRenderer());
 		} catch (error) {
 			new Notice(t("notice.mermaidUnavailable", { error: String(error) }));
 			return null;
@@ -326,13 +334,13 @@ export async function runExport(host: ExportHost, mode: ExportMode, source: Targ
 		const readNote = async (path: string): Promise<string> => {
 			const file = app.vault.getAbstractFileByPath(path);
 			if (!(file instanceof TFile)) throw new Error(`not found: ${path}`);
-			return app.vault.cachedRead(file);
+			return timed("io/readNote", () => app.vault.cachedRead(file));
 		};
 		const ctx: ModeContext = {
 			settings,
 			app,
 			deps: { readNote, renderer, cache, writer },
-			vault: await createVaultEnvironment(app),
+			vault: await timed("run/vaultEnv", () => createVaultEnvironment(app)),
 			selected: new Set(),
 			targetCount: targets.length,
 			combine: auto ? (auto.combine ?? false) : settings.defaultCombine,
@@ -375,7 +383,7 @@ export async function runExport(host: ExportHost, mode: ExportMode, source: Targ
 		ctx.selected = new Set(notes);
 
 		// 10: マニフェストは開始時に 1 回だけ読む（D4）
-		const { snapshot, warnings: loadWarnings } = await store.load();
+		const { snapshot, warnings: loadWarnings } = await timed("run/manifestLoad", () => store.load());
 		ctx.manifest = snapshot;
 		const runWarnings: Warning[] = [...loadWarnings];
 		// Word のテンプレート（C-1b）: 読めなければ内蔵のスタイルで続け、実行の警告にする。結合出力の準備（start）より前に読む
@@ -396,7 +404,7 @@ export async function runExport(host: ExportHost, mode: ExportMode, source: Targ
 		try {
 			outcome = await runSequential({
 				notes,
-				processNote: (path, signal) => definition.process(ctx, path, signal, snapshot),
+				processNote: (path, signal) => timed("run/note", () => definition.process(ctx, path, signal, snapshot)),
 				timeoutMs: settings.timeoutSeconds * 1000,
 				onError: settings.onError,
 				isCancelled: progress.isCancelled,
@@ -404,7 +412,8 @@ export async function runExport(host: ExportHost, mode: ExportMode, source: Targ
 				timers: { set: (callback, ms) => window.setTimeout(callback, ms), clear: (handle) => window.clearTimeout(handle as number) },
 			});
 			// 束ねる出力（1 フォルダ = 1 ブック）を完成させる。中断・fail-fast でも処理済みの分で完成させる
-			await definition.finish?.(ctx, outcome.results);
+			const results = outcome.results;
+			await timed("run/finish", async () => definition.finish?.(ctx, results));
 		} finally {
 			restoreTheme();
 			progress.hide();
@@ -412,16 +421,17 @@ export async function runExport(host: ExportHost, mode: ExportMode, source: Targ
 
 		// 10: 実行の最後に 1 回だけ保存する（中断したときも、書き込んだ分は記録する）
 		try {
-			await store.save(applyResults(snapshot, outcome.results, new Date().toISOString()));
+			await timed("run/manifestSave", () => store.save(applyResults(snapshot, outcome.results, new Date().toISOString())));
 		} catch (error) {
 			runWarnings.push({ code: "manifestSaveFailed", detail: String(error) });
 		}
-		await cache.evict().catch(() => undefined);
+		await timed("run/cacheEvict", () => cache.evict()).catch(() => undefined);
 
-		const report: RunReport = { end: outcome.end, results: outcome.results, runWarnings };
+		const report: RunReport = { end: outcome.end, results: outcome.results, runWarnings, ...(profiler ? { profile: profiler.report() } : {}) };
 		if (!auto) showReport(app, report);
 		return report;
 	} finally {
+		if (profiler) stopProfiling();
 		running = false;
 	}
 }

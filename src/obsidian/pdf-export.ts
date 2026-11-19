@@ -12,6 +12,7 @@ import { aggregateStatus } from "../core/run";
 import type { PluginSettings } from "../core/settings";
 import type { FileResult, ManifestSnapshot, NoteResult, OutputRef } from "../core/types";
 import { printPdf, type PdfPrintJob } from "./pdf-print";
+import { timed } from "../core/profile";
 
 export interface PdfRunDeps extends Pick<MermaidExportDeps, "writer" | "readNote"> {
 	vault: VaultEnvironment;
@@ -88,12 +89,11 @@ export class PdfRun {
 		const output = this.outputOf(notePath);
 		const title = fm.title ?? noteBaseName(notePath);
 		const author = fm.author ?? this.settings.authorName;
-		const printed = await printPdf(
-			this.app,
-			this.job(output, [{ notePath, title }], { title, author, date: valueToText(raw?.date), combined: false }, signal),
+		const printed = await timed("pdf/print", () =>
+			printPdf(this.app, this.job(output, [{ notePath, title }], { title, author, date: valueToText(raw?.date), combined: false }, signal)),
 		);
 		if (signal.aborted) throw signal.reason instanceof Error ? signal.reason : new Error("aborted");
-		const file = await writeWithConflictPolicy(output, printed.data, this.settings.onConflict, this.deps, signal, "pdf");
+		const file = await timed("pdf/write", () => writeWithConflictPolicy(output, printed.data, this.settings.onConflict, this.deps, signal, "pdf"));
 		return { notePath, status: aggregateStatus([file]), files: [file], warnings: printed.warnings, deleted: [] };
 	}
 

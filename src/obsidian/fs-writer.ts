@@ -6,6 +6,7 @@ import { sha256Hex } from "../core/hash";
 import type { OutputWriter } from "../core/mermaid-export";
 import { isProtectedPath } from "../core/output-plan";
 import type { FileResult, OutputRef } from "../core/types";
+import { timed } from "../core/profile";
 
 export interface OutputRoots {
 	/** Vault の絶対パス */
@@ -36,7 +37,11 @@ export class FsOutputWriter implements OutputWriter {
 		}
 	}
 
-	async write(ref: OutputRef, bytes: Uint8Array, signal: AbortSignal): Promise<Pick<FileResult, "status" | "reason" | "contentHash">> {
+	write(ref: OutputRef, bytes: Uint8Array, signal: AbortSignal): Promise<Pick<FileResult, "status" | "reason" | "contentHash">> {
+		return timed("io/write", () => this.writeNow(ref, bytes, signal));
+	}
+
+	private async writeNow(ref: OutputRef, bytes: Uint8Array, signal: AbortSignal): Promise<Pick<FileResult, "status" | "reason" | "contentHash">> {
 		if (isProtectedPath(ref, this.sources)) return { status: "failed", reason: "protected" };
 		const target = absolutePath(ref, this.roots);
 		const tmp = nodePath.join(nodePath.dirname(target), `.${nodePath.basename(target)}.tmp`);

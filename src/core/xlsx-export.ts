@@ -11,6 +11,7 @@ import type { PluginSettings } from "./settings";
 import type { FileResult, NoteResult, OutputRef, Warning } from "./types";
 import { outlineRows } from "./xlsx-outline";
 import { NOTE_LINK_SCHEME, XlsxBook, firstHeading, tablesOf, type XlsxLabels } from "./xlsx-render";
+import { timed, timedSync } from "./profile";
 
 /** Excel の出力単位（R8・D6）。 */
 export type XlsxUnit = "single" | "perFolder" | "perNote";
@@ -109,7 +110,7 @@ export class XlsxRun {
 			isConverted: () => true,
 			docxLink: (target) => `${NOTE_LINK_SCHEME}${target}`,
 		};
-		const assembled = await assembleNote(notePath, env, { keepComments: false, downloadExternalImages: this.settings.downloadExternalImages, signal });
+		const assembled = await timed("xlsx/assemble", () => assembleNote(notePath, env, { keepComments: false, downloadExternalImages: this.settings.downloadExternalImages, signal }));
 		const warnings: Warning[] = [...assembled.warnings];
 		const outline = this.settings.excelOutlineMode;
 		const tables = tablesOf(assembled.tree);
@@ -120,7 +121,9 @@ export class XlsxRun {
 		// タイムアウトしたノートのシートは足さない（D1・D2）
 		if (signal.aborted) throw signal.reason instanceof Error ? signal.reason : new Error("aborted");
 		const base = { notePath, noteName: noteBaseName(notePath), firstHeading: firstHeading(assembled.tree) };
-		warnings.push(...(outline ? group.book.addOutlineNote({ ...base, rows: outlineRows(assembled.tree) }) : group.book.addNote({ ...base, tables })));
+		warnings.push(
+			...timedSync("xlsx/addSheet", () => (outline ? group.book.addOutlineNote({ ...base, rows: outlineRows(assembled.tree) }) : group.book.addNote({ ...base, tables }))),
+		);
 		group.contributors.push(notePath);
 
 		if (this.unit === "perFolder") return { notePath, status: "success", files: [], warnings, deleted: [] };
@@ -154,7 +157,7 @@ export class XlsxRun {
 	}
 
 	private async writeBook(group: BookGroup, props: { title: string; creator: string }, signal: AbortSignal): Promise<FileResult> {
-		const bytes = await group.book.finish(props);
-		return writeWithConflictPolicy(group.output, bytes, this.settings.onConflict, this.deps, signal, "xlsx");
+		const bytes = await timed("xlsx/finishBook", () => group.book.finish(props));
+		return timed("xlsx/write", () => writeWithConflictPolicy(group.output, bytes, this.settings.onConflict, this.deps, signal, "xlsx"));
 	}
 }

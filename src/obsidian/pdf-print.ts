@@ -9,6 +9,7 @@ import { headingKey, headingOfSubpath, pdfPrintableHeightPx, pdfRelativePath, ty
 import { pdfLinkHref, postprocessPdf } from "../core/pdf-postprocess";
 import type { OutputRef, Warning } from "../core/types";
 import { waitForQuiet } from "./plugin-render";
+import { timed } from "../core/profile";
 
 const ROOT_CLASS = "batch-office-export-pdf-root";
 const CHAPTER_CLASS = "batch-office-export-pdf-chapter";
@@ -111,9 +112,10 @@ async function printNow(app: App, job: PdfPrintJob): Promise<PdfPrintResult> {
 			el.id = `boe-ch${index + 1}`;
 			if (job.combined) el.createEl("h1", { text: chapter.title, cls: CHAPTER_TITLE_CLASS, attr: { id: `${el.id}-title` } });
 			const body = el.createDiv();
-			await MarkdownRenderer.render(app, await app.vault.cachedRead(file), body, chapter.notePath, component);
+			const markdown = await app.vault.cachedRead(file);
+			await timed("pdf/markdownRender", () => MarkdownRenderer.render(app, markdown, body, chapter.notePath, component));
 			try {
-				await waitForQuiet(body, job.signal);
+				await timed("pdf/waitForQuiet", () => waitForQuiet(body, job.signal));
 			} catch (error) {
 				throwIfAborted(job.signal);
 				// 描画が止まらない（時間切れ）ときは、その時点の内容で続ける
@@ -149,12 +151,12 @@ async function printNow(app: App, job: PdfPrintJob): Promise<PdfPrintResult> {
 		let coverPdf: Uint8Array | undefined;
 		if (cover) {
 			view.addClass(HIDDEN_CLASS);
-			coverPdf = await contents.printToPDF({ ...base, displayHeaderFooter: false });
+			coverPdf = await timed("pdf/printToPDF/cover", () => contents.printToPDF({ ...base, displayHeaderFooter: false }));
 			view.removeClass(HIDDEN_CLASS);
 			cover.addClass(HIDDEN_CLASS);
 		}
 		const decorated = job.headerTitle || job.footerPageNumber;
-		const bodyPdf = await contents.printToPDF({
+		const bodyPdf = await timed("pdf/printToPDF/body", () => contents.printToPDF({
 			...base,
 			generateDocumentOutline: true,
 			displayHeaderFooter: decorated,
@@ -164,13 +166,13 @@ async function printNow(app: App, job: PdfPrintJob): Promise<PdfPrintResult> {
 						footerTemplate: job.footerPageNumber ? label('<span class="pageNumber"></span> / <span class="totalPages"></span>') : "<span></span>",
 					}
 				: {}),
-		});
-		const post = await postprocessPdf(toBytes(bodyPdf), {
+		}));
+		const post = await timed("pdf/postprocess", () => postprocessPdf(toBytes(bodyPdf), {
 			...(coverPdf ? { cover: toBytes(coverPdf) } : {}),
 			title: job.title,
 			...(job.author ? { author: job.author } : {}),
 			lang: job.lang,
-		});
+		}));
 		return { data: post.data, pages: post.pages, warnings };
 	} finally {
 		component.unload();

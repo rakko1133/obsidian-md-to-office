@@ -61,6 +61,15 @@ Obsidian の中でしか確かめられない処理（Mermaid・描画の取り�
 - 設定の上書きはその実行だけで、保存しない
 - テスト用 Vault には開発用ビルドを置いたままにする（2026-11-18 から）。本番ビルドには自動の読み込み直しがないので、本番ビルドを置くと、次に開発用ビルドを置いたときに画面でプラグインを無効 → 有効にし直す必要が出るため。本番ビルドが読み込めることは、マージの後に `npm run build` で作った `main.js` を Node.js で読み込んで確かめる
 
+## 処理時間の計測（高速化の検討）
+
+開発用の自動実行に `--profile` を付けると、段ごとの処理時間（回数・合計・平均・最大、ms）を表にする。例: `npm run obsidian:run -- --mode docx --path word3a --profile`
+
+- 計測点は `src/core/profile.ts` の `timed`（非同期）・`timedSync`（同期）で包んだ処理。ラベルは `段/細かい段`（例: `docx/prepare/assemble`、`mermaid/svgToPng/toBlob`）。入れ子の時間は親にも含まれる（包含時間）
+- 計測は `--profile` を付けた実行の間だけ。それ以外では包んだ処理をそのまま呼ぶ
+- Mermaid のキャッシュの影響を除くときは、先に `test-vault/.obsidian/plugins/batch-office-export/cache/mermaid/` を消す
+- Obsidian を後ろに置いたままだと、`canvas.toBlob` など描画のフレームに頼る処理が遅く出ることがある（2026-11-19 の作業記録）
+
 ## 変換結果を Word で開かずに確かめる（一覧ページ）
 
 各 .docx を Word で 1 つずつ開く代わりに、`scripts/preview-export.py` でまとめて画像にして確かめる。
