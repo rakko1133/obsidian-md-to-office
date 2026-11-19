@@ -9,7 +9,7 @@ import { cssColorToHex } from "../core/css-color";
 import { texToSvg } from "../core/math-svg";
 import type { ImageAsset } from "../core/obsidian-syntax";
 import { loadImage } from "./vault-env";
-import { timed } from "../core/profile";
+import { timed, timedSync } from "../core/profile";
 
 /** 0.5 秒続けて DOM が変わらなければ描画が終わったとみなす。1 依頼の上限は 10 秒（フェーズ 3b の決定事項）。 */
 const QUIET_MS = 500;
@@ -172,7 +172,8 @@ function inlineUses(svg: SVGSVGElement): void {
 
 /** 数式を SVG の画像にする。Obsidian 同梱の MathJax は CHTML 出力だけなので、プラグインに含めた MathJax を使う。 */
 async function renderMath(latex: string, display: boolean): Promise<ImageAsset> {
-	return timed("asset/renderMath", () => loadImage(new TextEncoder().encode(texToSvg(latex, display).svg), "svg"));
+	const svg = timedSync("asset/renderMath/texToSvg", () => texToSvg(latex, display).svg);
+	return timed("asset/renderMath/toImage", () => loadImage(new TextEncoder().encode(svg), "svg"));
 }
 
 const MIME_EXTENSIONS: Record<string, string> = {

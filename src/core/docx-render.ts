@@ -48,6 +48,7 @@ import type { BlockContent, Code, FootnoteDefinition, Heading, List, ListItem, P
 import { styleIds } from "./docx-template";
 import { walk } from "./markdown";
 import type { Callout, CodeToken, EmbedImage, ImageAsset } from "./obsidian-syntax";
+import { timed, timedSync } from "./profile";
 
 export interface DiagramAsset {
 	svg: Uint8Array;
@@ -764,7 +765,7 @@ export async function renderDocx(tree: Root, options: DocxRenderOptions): Promis
 	}
 	if (options.fileNameAsTitle) children.push(new Paragraph({ heading: HeadingLevel.TITLE, children: [new TextRun(options.title)] }));
 	if (options.propertiesTable && options.propertiesTable.length > 0) children.push(renderer.propertiesTable(options.propertiesTable), new Paragraph({ children: [] }));
-	children.push(...renderer.blocks(tree.children, shift));
+	children.push(...timedSync("docx/render/blocks", () => renderer.blocks(tree.children, shift)));
 
 	const { fonts, page } = options;
 	const body = { ascii: fonts.bodyLatin, hAnsi: fonts.bodyLatin, cs: fonts.bodyLatin, eastAsia: fonts.bodyEastAsia };
@@ -816,8 +817,8 @@ export async function renderDocx(tree: Root, options: DocxRenderOptions): Promis
 	});
 	const created = options.properties?.created;
 	const overrides = created ? [{ path: "docProps/core.xml", data: coreXml(options, created) }] : [];
-	const packed = await Packer.pack(doc, "arraybuffer", false, overrides);
-	return options.headingNumbering ? withoutHeadingStartOverrides(packed) : packed;
+	const packed = await timed("docx/render/pack", () => Packer.pack(doc, "arraybuffer", false, overrides));
+	return options.headingNumbering ? timedSync("docx/render/headingFix", () => withoutHeadingStartOverrides(packed)) : packed;
 }
 
 /**

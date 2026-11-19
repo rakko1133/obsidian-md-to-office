@@ -32,7 +32,7 @@ import { useLightTheme } from "./pdf-print";
 import { createVaultEnvironment } from "./vault-env";
 import { ProgressNotice } from "./progress";
 import { showReport } from "./report-modal";
-import { startProfiling, stopProfiling, timed, type Profiler } from "../core/profile";
+import { startProfiling, stopProfiling, timed, timedSync, type Profiler } from "../core/profile";
 
 /** office は「確認画面で形式を選ぶ」（初期値は設定 defaultFormats: R8）。both は Word と Excel */
 export type ExportMode = "mermaid" | "docx" | "xlsx" | "pdf" | "both" | "summary" | "office";
@@ -304,15 +304,17 @@ export async function runExport(host: ExportHost, mode: ExportMode, source: Targ
 		return null;
 	}
 
+	// 計測（開発用）は対象の収集から始める
+	const profiler = auto?.profile ? startProfiling() : null;
 	// 01: 変換対象の収集
-	const { targets, excluded } = filterTargets(collectCandidates(app, source), settings.includeGlobs, settings.excludeGlobs);
+	const { targets, excluded } = timedSync("run/collect", () => filterTargets(collectCandidates(app, source), settings.includeGlobs, settings.excludeGlobs));
 	if (targets.length === 0) {
+		if (profiler) stopProfiling();
 		new Notice(t("notice.noTargets", { excluded: String(excluded.length) }));
 		return null;
 	}
 
 	running = true;
-	const profiler = auto?.profile ? startProfiling() : null;
 	try {
 		const basePath = adapter.getBasePath();
 		const pluginDirAbs = nodePath.join(basePath, ...host.pluginDir.split("/"));

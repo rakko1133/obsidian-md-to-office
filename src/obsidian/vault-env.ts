@@ -9,7 +9,7 @@ import { svgSize, type VaultEnvironment } from "../core/docx-export";
 import { resolveCssVariables } from "../core/svg-css";
 import type { CodeToken, ImageAsset } from "../core/obsidian-syntax";
 import { createPluginRenderer } from "./plugin-render";
-import { timed } from "../core/profile";
+import { timed, timedSync } from "../core/profile";
 
 /** SVG の PNG の代替画像の倍率（96 dpi の 2 倍 = 192 dpi。Mermaid の既定と同じ）。 */
 const SVG_FALLBACK_SCALE = 2;
@@ -50,7 +50,7 @@ export async function loadImage(bytes: Uint8Array, ext: string): Promise<ImageAs
 		// Word は CSS 変数を解釈しないので、実際の値に置き換える（他のプラグインの描画結果の SVG など）
 		const text = resolveCssVariables(new TextDecoder().decode(bytes));
 		bytes = new TextEncoder().encode(text);
-		const img = await decode(new Blob([bytes as BlobPart], { type: "image/svg+xml" }));
+		const img = await timed("image/decode", () => decode(new Blob([bytes as BlobPart], { type: "image/svg+xml" })));
 		const fromAttr = svgSize(text);
 		const width = img.naturalWidth || fromAttr.width;
 		const height = img.naturalHeight || fromAttr.height;
@@ -58,7 +58,7 @@ export async function loadImage(bytes: Uint8Array, ext: string): Promise<ImageAs
 		return { type: "svg", data: bytes, fallback, width, height };
 	}
 	const mime = ext === "jpg" || ext === "jpeg" ? "image/jpeg" : `image/${ext}`;
-	const img = await decode(new Blob([bytes as BlobPart], { type: mime }));
+	const img = await timed("image/decode", () => decode(new Blob([bytes as BlobPart], { type: mime })));
 	const width = img.naturalWidth;
 	const height = img.naturalHeight;
 	if (ext === "png") return { type: "png", data: bytes, width, height };
@@ -89,14 +89,14 @@ async function toPng(img: HTMLImageElement, width: number, height: number, white
 		ctx.fillStyle = "#ffffff";
 		ctx.fillRect(0, 0, canvas.width, canvas.height);
 	}
-	ctx.drawImage(img, 0, 0, canvas.width, canvas.height);
-	const blob = await new Promise<Blob>((resolve, reject) => {
+	timedSync("image/toPng/draw", () => ctx.drawImage(img, 0, 0, canvas.width, canvas.height));
+	const blob = await timed("image/toPng/toBlob", () => new Promise<Blob>((resolve, reject) => {
 		try {
 			canvas.toBlob((b) => (b ? resolve(b) : reject(new Error("toBlob returned null"))), "image/png");
 		} catch (error) {
 			reject(error instanceof Error ? error : new Error(String(error)));
 		}
-	});
+	}));
 	return new Uint8Array(await blob.arrayBuffer());
 }
 
