@@ -8,8 +8,9 @@ import { obsidianOpenUri } from "../core/note-assembly";
 import { headingKey, headingOfSubpath, pdfPrintableHeightPx, pdfRelativePath, type PdfPageOptions } from "../core/pdf-export";
 import { pdfLinkHref, postprocessPdf } from "../core/pdf-postprocess";
 import type { OutputRef, Warning } from "../core/types";
-import { waitForQuiet } from "./plugin-render";
+import { isRenderableLanguage, waitForQuiet } from "./plugin-render";
 import { timed } from "../core/profile";
+import { noteTiming } from "../core/render-wait";
 
 const ROOT_CLASS = "batch-office-export-pdf-root";
 const CHAPTER_CLASS = "batch-office-export-pdf-chapter";
@@ -115,12 +116,15 @@ async function printNow(app: App, job: PdfPrintJob): Promise<PdfPrintResult> {
 			const markdown = await app.vault.cachedRead(file);
 			await timed("pdf/markdownRender", () => MarkdownRenderer.render(app, markdown, body, chapter.notePath, component));
 			try {
-				await timed("pdf/waitForQuiet", () => waitForQuiet(body, job.signal));
+				const timing = noteTiming(markdown, (lang) => isRenderableLanguage(app, lang));
+				await timed("pdf/waitForQuiet", () => waitForQuiet(body, timing, job.signal, "pdf/waitForQuiet"));
 			} catch (error) {
 				throwIfAborted(job.signal);
 				// 描画が止まらない（時間切れ）ときは、その時点の内容で続ける
 				warnings.push({ code: "renderFailed", detail: `${chapter.notePath}: ${error instanceof Error ? error.message : String(error)}` });
 			}
+			// 画像の読み込みを待つ（DOM の変化では分からない。上限つき）
+			await timed("pdf/waitImages", () => waitForImages(body));
 			if (job.combined) demoteHeadings(body);
 			// Mermaid 図の拡大・縮小のボタン（Obsidian 1.15 以降）は印刷しない
 			for (const control of Array.from(body.querySelectorAll(".pele-zoom"))) control.remove();
@@ -268,4 +272,18 @@ function toBytes(data: Uint8Array): Uint8Array {
 
 function throwIfAborted(signal: AbortSignal | undefined): void {
 	if (signal?.aborted) throw signal.reason instanceof Error ? signal.reason : new Error("aborted");
+}
+
+/** 画像の読み込みの上限 */
+const IMAGE_WAIT_MS = 5_000;
+
+/** 要素の中の画像が読み込まれる（または失敗する）まで待つ。上限を超えたら、その時点の状態で続ける。 */
+async function waitForImages(el: HTMLElement): Promise<void> {
+	const pending = Array.from(el.querySelectorAll("img")).filter((img) => !img.complete);
+	if (pending.length === 0) return;
+	const loaded = Promise.all(pending.map((img) => img.decode().catch(() => undefined)));
+	let timer: number | undefined;
+	const limit = new Promise<void>((resolve) => (timer = window.setTimeout(resolve, IMAGE_WAIT_MS)));
+	await Promise.race([loaded, limit]);
+	window.clearTimeout(timer);
 }

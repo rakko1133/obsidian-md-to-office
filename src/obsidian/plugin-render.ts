@@ -9,12 +9,10 @@ import { cssColorToHex } from "../core/css-color";
 import { texToSvg } from "../core/math-svg";
 import type { ImageAsset } from "../core/obsidian-syntax";
 import { loadImage } from "./vault-env";
-import { timed, timedSync } from "../core/profile";
+import { profileClock, recordProfile, timed, timedSync } from "../core/profile";
 import { canvasToPng } from "./canvas-png";
+import { MAX_WAIT_MS, PLUGIN_BLOCK_TIMING, type QuietTiming } from "../core/render-wait";
 
-/** 0.5 秒続けて DOM が変わらなければ描画が終わったとみなす。1 依頼の上限は 10 秒（フェーズ 3b の決定事項）。 */
-const QUIET_MS = 500;
-const MAX_WAIT_MS = 10_000;
 /** 外部の画像の上限（20 MB） */
 const MAX_DOWNLOAD_BYTES = 20 * 1024 * 1024;
 /** 描画しない言語（Mermaid はこのプラグインが描画する） */
@@ -32,7 +30,7 @@ export interface PluginRenderer {
 export function createPluginRenderer(app: App): PluginRenderer {
 	const colors = new Map<string, string | undefined>();
 	return {
-		renderableLanguage: (lang) => renderableLanguage(app, lang),
+		renderableLanguage: (lang) => isRenderableLanguage(app, lang),
 		renderBlock: (lang, source, sourcePath, signal) => renderBlock(app, lang, source, sourcePath, signal),
 		renderMath,
 		fetchImage,
@@ -44,7 +42,7 @@ export function createPluginRenderer(app: App): PluginRenderer {
 }
 
 /** コードブロックの処理が登録されている言語か。登録の一覧（非公開）を読めなければ、Dataview が有効なときの dataview 系だけ。 */
-function renderableLanguage(app: App, lang: string): boolean {
+export function isRenderableLanguage(app: App, lang: string): boolean {
 	const name = lang.toLowerCase();
 	if (OWN_LANGUAGES.has(name)) return false;
 	const processors = (MarkdownPreviewRenderer as unknown as { codeBlockPostProcessors?: Record<string, unknown> }).codeBlockPostProcessors;
@@ -63,7 +61,7 @@ async function renderBlock(app: App, lang: string, source: string, sourcePath: s
 		const longest = Math.max(0, ...(source.match(/`+/g) ?? []).map((m) => m.length));
 		const fence = "`".repeat(Math.max(3, longest + 1));
 		await timed("plugin/markdownRender", () => MarkdownRenderer.render(app, `${fence}${lang}\n${source}\n${fence}`, host, sourcePath, component));
-		await timed("plugin/waitForQuiet", () => waitForQuiet(host, signal));
+		await timed("plugin/waitForQuiet", () => waitForQuiet(host, PLUGIN_BLOCK_TIMING, signal, "plugin/waitForQuiet"));
 		// Dataview のエラー（JavaScript のクエリが無効、クエリの誤りなど）は、描画できなかったとして原文を残し、その文を警告にする
 		const error = host.querySelector(".dataview-error");
 		if (error) throw new Error((error.textContent ?? "").trim() || "Dataview error");
@@ -77,14 +75,25 @@ async function renderBlock(app: App, lang: string, source: string, sourcePath: s
 	}
 }
 
-/** DOM の変化が QUIET_MS 続けて止まるまで待つ。上限を超えたら時間切れ、ノートのタイムアウトなら打ち切り。 */
-export function waitForQuiet(el: HTMLElement, signal?: AbortSignal): Promise<void> {
+/**
+ * 描画の完了を待つ: 最初の変化を timing.firstChangeMs まで待ち、変化があれば、それから timing.settleMs 変化が止まるまで待つ
+ * （src/core/render-wait.ts）。上限（MAX_WAIT_MS）を超えたら時間切れ、ノートのタイムアウトなら打ち切り。
+ */
+export function waitForQuiet(el: HTMLElement, timing: QuietTiming, signal?: AbortSignal, profileLabel?: string): Promise<void> {
+	// 計測（開発用）: 最後に DOM が変わった時刻（実際に描画にかかった時間）と、変化の回数
+	const startedAt = profileClock();
+	let lastChange = startedAt;
+	let changes = 0;
 	return new Promise((resolve, reject) => {
-		let quiet = window.setTimeout(done, QUIET_MS);
+		let quiet = window.setTimeout(done, timing.firstChangeMs);
 		const limit = window.setTimeout(() => finish(new Error(`timeout (${MAX_WAIT_MS / 1000} s)`)), MAX_WAIT_MS);
 		const observer = new MutationObserver(() => {
+			if (startedAt !== null) {
+				lastChange = profileClock();
+				changes++;
+			}
 			window.clearTimeout(quiet);
-			quiet = window.setTimeout(done, QUIET_MS);
+			quiet = window.setTimeout(done, timing.settleMs);
 		});
 		const onAbort = () => finish(signal?.reason instanceof Error ? signal.reason : new Error("aborted"));
 		observer.observe(el, { childList: true, subtree: true, attributes: true, characterData: true });
@@ -94,6 +103,10 @@ export function waitForQuiet(el: HTMLElement, signal?: AbortSignal): Promise<voi
 		}
 		function finish(error: Error | null): void {
 			observer.disconnect();
+			if (startedAt !== null && lastChange !== null && profileLabel) {
+				recordProfile(`${profileLabel}/lastChange`, lastChange - startedAt);
+				recordProfile(`${profileLabel}/changes`, changes);
+			}
 			window.clearTimeout(quiet);
 			window.clearTimeout(limit);
 			signal?.removeEventListener("abort", onAbort);

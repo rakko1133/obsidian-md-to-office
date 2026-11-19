@@ -53,6 +53,16 @@ export function stopProfiling(): void {
 	active = null;
 }
 
+/** 計測した時間をそのまま記録する（包めない処理の内訳: 描画の静止待ちで最後に DOM が変わった時刻など）。 */
+export function recordProfile(label: string, ms: number): void {
+	active?.record(label, ms);
+}
+
+/** 計測中の時計（計測していなければ null）。 */
+export function profileClock(): number | null {
+	return active ? active.clock() : null;
+}
+
 /** 非同期の処理を計測する。失敗しても時間は記録する。 */
 export async function timed<T>(label: string, fn: () => Promise<T>): Promise<T> {
 	const profiler = active;
