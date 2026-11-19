@@ -7,7 +7,8 @@
 //
 // オプション: --mode mermaid|docx|xlsx|pdf|both|summary（既定 docx）、--combine（1 フォルダを 1 つの .docx / .pdf にまとめる）、--path（複数可。空文字で Vault 全体）、--set キー=値（複数可。この実行だけの設定。
 // 値は JSON として読めればその値、読めなければ文字列）、--timeout 秒（既定 300）、--json（結果をそのまま出す）、
-// --profile（処理時間を計測して、段ごとの表を出す。docs/process/development.md の「処理時間の計測」）
+// --profile（処理時間を計測して、段ごとの表を出す。docs/process/development.md の「処理時間の計測」）、
+// --select（複数可。確認画面でチェックを残すノートの Vault 内パス。省略するとすべて）、--plans（確認画面に出す予定を表示して、実際の出力と比べる）
 import { existsSync, readFileSync, statSync, unlinkSync, writeFileSync } from "node:fs";
 import { join } from "node:path";
 import { randomUUID } from "node:crypto";
@@ -18,7 +19,7 @@ const RESULT = join(PLUGIN_DIR, "dev-result.json");
 const STATUS = join(PLUGIN_DIR, "dev-status.json");
 
 const args = process.argv.slice(2);
-const opts = { mode: "docx", paths: [], settings: {}, timeout: 300, json: false, waitReload: false, combine: false, profile: false };
+const opts = { mode: "docx", paths: [], settings: {}, timeout: 300, json: false, waitReload: false, combine: false, profile: false, select: [], plans: false };
 for (let i = 0; i < args.length; i++) {
 	const a = args[i];
 	if (a === "--mode") opts.mode = args[++i];
@@ -35,6 +36,8 @@ for (let i = 0; i < args.length; i++) {
 	else if (a === "--json") opts.json = true;
 	else if (a === "--combine") opts.combine = true;
 	else if (a === "--profile") opts.profile = true;
+	else if (a === "--select") opts.select.push(args[++i] ?? "");
+	else if (a === "--plans") opts.plans = true;
 	else if (a === "--wait-reload") opts.waitReload = true;
 	else {
 		console.error(`unknown option: ${a}`);
@@ -74,7 +77,7 @@ if (opts.paths.length === 0) {
 
 const id = randomUUID();
 if (existsSync(RESULT)) unlinkSync(RESULT);
-writeFileSync(REQUEST, JSON.stringify({ id, mode: opts.mode, paths: opts.paths, settings: opts.settings, combine: opts.combine, profile: opts.profile }, null, "\t"));
+writeFileSync(REQUEST, JSON.stringify({ id, mode: opts.mode, paths: opts.paths, settings: opts.settings, combine: opts.combine, profile: opts.profile, ...(opts.select.length > 0 ? { select: opts.select } : {}), plans: opts.plans }, null, "\t"));
 
 let result = null;
 while (Date.now() < deadline) {
@@ -110,9 +113,23 @@ if (opts.json) {
 		for (const w of r.warnings) console.log(`  warning: ${r.notePath}: ${w.code}${w.detail ? ` ${w.detail}` : ""}`);
 	}
 	for (const w of result.runWarnings) console.log(`  run warning: ${w.code}${w.detail ? ` ${w.detail}` : ""}`);
+	if (result.plans) printPlans(result.plans, files);
 	if (result.profile) printProfile(result.profile);
 }
 process.exit(result.error || result.results?.some((r) => r.status === "failed") ? 1 : 0);
+
+/** 確認画面の予定と、実際に書き込んだ出力を比べる。予定にない出力・出力されなかった予定を「食い違い」として出す。 */
+function printPlans(plans, files) {
+	const planned = new Set(Object.values(plans).flat());
+	console.log("");
+	console.log("plans (confirm screen):");
+	for (const [note, outputs] of Object.entries(plans)) console.log(`  ${note} -> ${outputs.join(", ") || "(none)"}`);
+	const notPlanned = [...files.keys()].filter((p) => !planned.has(p));
+	const notWritten = [...planned].filter((p) => !files.has(p));
+	if (notPlanned.length === 0 && notWritten.length === 0) console.log("plans match the outputs");
+	for (const p of notPlanned) console.log(`  MISMATCH written but not planned: ${p}`);
+	for (const p of notWritten) console.log(`  MISMATCH planned but not written: ${p}`);
+}
 
 /** 処理時間の表（ラベル順。入れ子の段の時間は親にも含まれる）。 */
 function printProfile(profile) {

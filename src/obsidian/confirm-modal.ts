@@ -12,15 +12,18 @@ export interface ConfirmOptions {
 	targets: readonly string[];
 	excludedCount: number;
 	outputLabel: string;
-	/** ノート 1 件のドライラン（描画しない） */
-	plan: (notePath: string) => Promise<PlannedOutput[]>;
+	/**
+	 * ノート 1 件のドライラン（描画しない）。selectedCount はチェックが残っている件数。
+	 * 出力の名前は実行する件数が 1 件かどうかで変わる（Excel: R8）ので、件数を渡す
+	 */
+	plan: (notePath: string, selectedCount: number) => Promise<PlannedOutput[]>;
 	/** 出力形式を選べるようにする（Word / Excel / PDF の組み合わせ: R8・H1-PDF）。形式を変えると、題名と予定を計算し直す */
 	formats?: {
 		initial: readonly OutputFormat[];
 		/** 結合出力のチェックボックスの初期値（C-8）。形式に Word か PDF があるときだけ出す */
 		combine: boolean;
 		title(formats: readonly OutputFormat[]): string;
-		plan(formats: readonly OutputFormat[], combine: boolean, notePath: string): Promise<PlannedOutput[]>;
+		plan(formats: readonly OutputFormat[], combine: boolean, notePath: string, selectedCount: number): Promise<PlannedOutput[]>;
 	};
 }
 
@@ -52,6 +55,8 @@ class ConfirmModal extends Modal {
 	private combineSetting: Setting | null = null;
 	/** 予定の計算の世代（形式を変えたら、古い計算の結果を捨てる） */
 	private generation = 0;
+	/** 今の予定を、チェックが 1 件だけの状態で計算したか（1 件かどうかが変わったら計算し直す: R8） */
+	private plannedForSingle = false;
 
 	constructor(
 		app: App,
@@ -190,6 +195,10 @@ class ConfirmModal extends Modal {
 	}
 
 	private updateSummary(): void {
+		// 実行する件数が 1 件かどうかで出力の名前が変わる（Excel の {ノート名}.xlsx / {フォルダ名}.xlsx: R8）
+		if (this.checked.size > 0 && (this.checked.size === 1) !== this.plannedForSingle && (this.formats?.length ?? 1) > 0) {
+			this.replan();
+		}
 		this.summaryEl.setText(t("confirm.summary", { selected: String(this.checked.size), total: String(this.options.targets.length) }));
 		this.runButton?.setDisabled(this.checked.size === 0 || this.formats?.length === 0);
 		this.updateTotals();
@@ -209,11 +218,13 @@ class ConfirmModal extends Modal {
 		const chosen = this.formats ? [...this.formats] : undefined;
 		const combine = this.combine && this.combinable();
 		const formats = this.options.formats;
+		const selectedCount = this.checked.size;
+		this.plannedForSingle = selectedCount === 1;
 		for (const note of this.options.targets) {
 			if (this.resolved || generation !== this.generation) return;
 			let plans: PlannedOutput[] = [];
 			try {
-				plans = formats && chosen ? await formats.plan(chosen, combine, note) : await this.options.plan(note);
+				plans = formats && chosen ? await formats.plan(chosen, combine, note, selectedCount) : await this.options.plan(note, selectedCount);
 			} catch {
 				plans = [];
 			}

@@ -73,8 +73,11 @@ interface ModeContext {
 	vault: VaultEnvironment;
 	/** 今回の実行の対象（確認画面で選んだノート）。内部リンクの変換対象の範囲（A-18） */
 	selected: ReadonlySet<string>;
-	/** 確認画面に出す候補の件数（ドライランでの Excel の出力単位の判定: R8） */
-	targetCount: number;
+	/**
+	 * 実行するノートの件数（確認画面でチェックが残っている件数）。Excel の出力単位を決める（R8: 1 件なら {ノート名}.xlsx）。
+	 * 実行時（XlsxRun）と同じ件数でドライランしないと、確認画面の出力名と実際の出力が食い違う
+	 */
+	selectedCount: number;
 	/** Excel のブックの状態（確認画面の後に作る） */
 	xlsx?: XlsxRun;
 	/** Vault 全体の集計の状態（A-34） */
@@ -146,8 +149,8 @@ const MODES: Record<Exclude<ExportMode, "office" | "both">, ModeDefinition> = {
 	},
 	xlsx: {
 		title: () => t("confirm.titleExcel"),
-		plan: ({ settings, deps, vault, targetCount }, path) =>
-			planXlsxNote(path, xlsxUnit(targetCount, settings), settings, vault.vaultName, (ref: OutputRef) => deps.writer.exists(ref)),
+		plan: ({ settings, deps, vault, selectedCount }, path) =>
+			planXlsxNote(path, xlsxUnit(selectedCount, settings), settings, vault.vaultName, (ref: OutputRef) => deps.writer.exists(ref)),
 		start: (ctx, selected) => {
 			ctx.xlsx = new XlsxRun(ctx.settings, selected, { readNote: ctx.deps.readNote, writer: ctx.deps.writer, vault: ctx.vault, labels: xlsxLabels() });
 		},
@@ -265,6 +268,10 @@ export interface AutoRunOptions {
 	combine?: boolean;
 	/** 処理時間を計測して、結果に付ける（高速化の検討） */
 	profile?: boolean;
+	/** 確認画面でチェックを残すノート（Vault からの相対パス）。省略するとすべての候補 */
+	select?: readonly string[];
+	/** 確認画面に出す予定（ドライラン）を、選んだノートについて計算して結果に付ける */
+	plans?: boolean;
 }
 
 export interface RunReport {
@@ -273,6 +280,8 @@ export interface RunReport {
 	runWarnings: Warning[];
 	/** 処理時間の集計（AutoRunOptions.profile のときだけ） */
 	profile?: ReturnType<Profiler["report"]>;
+	/** 確認画面に出す予定（AutoRunOptions.plans のときだけ）。ノート → 出力（`{location}:{path}`）の一覧 */
+	plans?: Record<string, string[]>;
 }
 
 type RunOutcomeEnd = Awaited<ReturnType<typeof runSequential>>["end"];
@@ -342,7 +351,7 @@ export async function runExport(host: ExportHost, mode: ExportMode, source: Targ
 			deps: { readNote, renderer, cache, writer },
 			vault: await timed("run/vaultEnv", () => createVaultEnvironment(app)),
 			selected: new Set(),
-			targetCount: targets.length,
+			selectedCount: targets.length,
 			combine: auto ? (auto.combine ?? false) : settings.defaultCombine,
 		};
 
@@ -354,20 +363,23 @@ export async function runExport(host: ExportHost, mode: ExportMode, source: Targ
 					? settings.externalOutputRoot
 					: `${settings.outputRoot}/`;
 		const selected = auto
-			? targets
+			? auto.select
+				? targets.filter((path) => auto.select?.includes(path))
+				: targets
 			: await confirmTargets(app, {
 					title: definition.title(),
 					targets,
 					excludedCount: excluded.length,
 					outputLabel,
-					plan: (path) => definition.plan(ctx, path),
+					plan: (path, selectedCount) => definition.plan({ ...ctx, selectedCount }, path),
 					...(initialFormats
 						? {
 								formats: {
 									initial: initialFormats,
 									combine: settings.defaultCombine,
 									title: (chosen: readonly OutputFormat[]) => definitionFor(chosen).title(),
-									plan: (chosen: readonly OutputFormat[], combine: boolean, path: string) => definitionFor(chosen).plan({ ...ctx, combine }, path),
+									plan: (chosen: readonly OutputFormat[], combine: boolean, path: string, selectedCount: number) =>
+										definitionFor(chosen).plan({ ...ctx, combine, selectedCount }, path),
 								},
 							}
 						: {}),
@@ -381,6 +393,13 @@ export async function runExport(host: ExportHost, mode: ExportMode, source: Targ
 		if (chosen.combine !== undefined) ctx.combine = chosen.combine;
 		const notes = chosen.notes;
 		ctx.selected = new Set(notes);
+		ctx.selectedCount = notes.length;
+		// 開発用: 確認画面と同じ計算で、選んだノートの予定を求める（確認画面の表示と実際の出力の照合）
+		let plans: Record<string, string[]> | undefined;
+		if (auto?.plans) {
+			plans = {};
+			for (const path of notes) plans[path] = (await definition.plan(ctx, path)).map((p) => `${p.output.location}:${p.output.path}`);
+		}
 
 		// 10: マニフェストは開始時に 1 回だけ読む（D4）
 		const { snapshot, warnings: loadWarnings } = await timed("run/manifestLoad", () => store.load());
@@ -427,7 +446,13 @@ export async function runExport(host: ExportHost, mode: ExportMode, source: Targ
 		}
 		await timed("run/cacheEvict", () => cache.evict()).catch(() => undefined);
 
-		const report: RunReport = { end: outcome.end, results: outcome.results, runWarnings, ...(profiler ? { profile: profiler.report() } : {}) };
+		const report: RunReport = {
+			end: outcome.end,
+			results: outcome.results,
+			runWarnings,
+			...(profiler ? { profile: profiler.report() } : {}),
+			...(plans ? { plans } : {}),
+		};
 		if (!auto) showReport(app, report);
 		return report;
 	} finally {
