@@ -2,10 +2,12 @@
 // - Obsidian 標準の「PDF にエクスポート」と同じ作り（body 直下の .print に読みモードの HTML を描き、@media print で
 //   それ以外を隠す）で、今のウィンドウの webContents.printToPDF() から PDF を作れるか
 // - しおり（generateDocumentOutline）、フッターのページ番号（footerTemplate）、ヘッダーのタイトル
-// - 表紙のページだけヘッダー・フッターを出さない方法（@page :first の余白を 0 にしても消えないことを確かめた）
+// - 表紙のページだけヘッダー・フッターを出さない（@page :first では消えないので、表紙を別に印刷して pdf-lib で差し込む）
+// - 別の PDF への相対リンクと作成者（pdf-lib の後処理: src/core/pdf-postprocess.ts）
 // 改ページと表紙の CSS は styles.css（.print .batch-office-export-pdf-*）
 // - 結合出力（ノートごとに改ページ）と、[[ノート#見出し]] の PDF 内リンク・目次
 import { Component, MarkdownRenderer, TFile, TFolder, type App, type TAbstractFile } from "obsidian";
+import { pdfLinkHref, postprocessPdf } from "../core/pdf-postprocess";
 
 const QUIET_MS = 500;
 const MAX_WAIT_MS = 20000;
@@ -66,12 +68,12 @@ export async function runPdfPrototype(app: App, items: TAbstractFile[], options:
 		const path = `${outDir}/${group.name}.pdf`;
 		const info = await printGroup(app, group.notes, group.name, options);
 		await app.vault.adapter.writeBinary(path, info.data.buffer.slice(info.data.byteOffset, info.data.byteOffset + info.data.byteLength) as ArrayBuffer);
-		results.push({ path, bytes: info.data.byteLength, ms: Date.now() - started, links: info.links });
+		results.push({ path, bytes: info.data.byteLength, pages: info.pages, fileLinks: info.fileLinks, ms: Date.now() - started, links: info.links });
 	}
 	return { results };
 }
 
-async function printGroup(app: App, notes: TFile[], title: string, options: PdfPrototypeOptions): Promise<{ data: Uint8Array; links: Record<string, number> }> {
+async function printGroup(app: App, notes: TFile[], title: string, options: PdfPrototypeOptions): Promise<{ data: Uint8Array; pages: number; fileLinks: number; links: Record<string, number> }> {
 	const body = activeDocument.body;
 	const root = body.createDiv({ cls: "print" });
 	const view = root.createDiv({ cls: "markdown-preview-view markdown-rendered" });
@@ -82,11 +84,16 @@ async function printGroup(app: App, notes: TFile[], title: string, options: PdfP
 	const windowTitle = activeDocument.title;
 	const links = { anchor: 0, otherPdf: 0, textOnly: 0, external: 0 };
 	try {
+		const fm = notes.length === 1 ? app.metadataCache.getFileCache(notes[0])?.frontmatter : undefined;
+		const docTitle = String(fm?.title ?? title);
+		const author = fm?.author ? String(fm.author) : undefined;
+		// 表紙は本文と別に印刷する（ヘッダー・フッターを付けないため）。本文を印刷する間は隠す
+		let cover: HTMLElement | null = null;
 		if (options.cover) {
-			const cover = view.createDiv({ cls: "batch-office-export-pdf-cover" });
-			const fm = notes.length === 1 ? app.metadataCache.getFileCache(notes[0])?.frontmatter : undefined;
-			cover.createEl("h1", { text: String(fm?.title ?? title) });
-			if (fm?.author) cover.createEl("p", { text: String(fm.author) });
+			cover = root.createDiv({ cls: "markdown-preview-view markdown-rendered batch-office-export-pdf-cover" });
+			root.insertBefore(cover, view);
+			cover.createEl("h1", { text: docTitle });
+			if (author) cover.createEl("p", { text: author });
 			cover.createEl("p", { text: String(fm?.date ?? new Date().toISOString().slice(0, 10)) });
 		}
 		const toc = options.toc ? view.createDiv({ cls: "batch-office-export-pdf-toc" }) : null;
@@ -121,7 +128,8 @@ async function printGroup(app: App, notes: TFile[], title: string, options: PdfP
 					a.setAttribute("href", `#${id}`);
 					links.anchor++;
 				} else if (dest && dest.extension === "md" && !options.combine) {
-					a.setAttribute("href", `${encodeURI(dest.basename)}.pdf${sub ? `#${encodeURIComponent(slug(sub))}` : ""}`);
+					// 目印の URL にしておき、後処理で別の PDF へのリンク（GoToR）に書き換える。見出しの位置までは指せない（1 ページ目を開く）
+					a.setAttribute("href", pdfLinkHref(`${dest.basename}.pdf`));
 					links.otherPdf++;
 				} else {
 					a.removeAttribute("href");
@@ -146,18 +154,34 @@ async function printGroup(app: App, notes: TFile[], title: string, options: PdfP
 		const label = (text: string) => `<div style="font-size:9px;width:100%;text-align:center;color:#555;">${text}</div>`;
 		// PDF の文書プロパティのタイトルは document.title から入る
 		activeDocument.title = title;
-		const data = await currentWebContents().printToPDF({
+		const base = {
 			pageSize: options.pageSize ?? "A4",
 			landscape: options.landscape ?? false,
 			printBackground: true,
 			margins: { top: inch(margin), bottom: inch(margin), left: inch(margin), right: inch(margin) },
-			generateDocumentOutline: true,
 			generateTaggedPDF: true,
+		};
+		let coverPdf: Uint8Array | undefined;
+		if (cover) {
+			view.addClass("batch-office-export-pdf-hidden");
+			coverPdf = await currentWebContents().printToPDF({ ...base, displayHeaderFooter: false });
+			view.removeClass("batch-office-export-pdf-hidden");
+			cover.addClass("batch-office-export-pdf-hidden");
+		}
+		const bodyPdf = await currentWebContents().printToPDF({
+			...base,
+			generateDocumentOutline: true,
 			displayHeaderFooter: true,
-			headerTemplate: options.header ? label(escapeHtml(title)) : "<span></span>",
+			headerTemplate: options.header ? label(escapeHtml(docTitle)) : "<span></span>",
 			footerTemplate: label('<span class="pageNumber"></span> / <span class="totalPages"></span>'),
 		});
-		return { data, links };
+		const post = await postprocessPdf(bodyPdf, {
+			...(coverPdf ? { cover: coverPdf } : {}),
+			title: docTitle,
+			...(author ? { author } : {}),
+			lang: activeDocument.documentElement.lang || "ja",
+		});
+		return { data: post.data, pages: post.pages, fileLinks: post.fileLinks, links };
 	} finally {
 		activeDocument.title = windowTitle;
 		if (themeDark) { body.removeClass("theme-light"); body.addClass("theme-dark"); };
