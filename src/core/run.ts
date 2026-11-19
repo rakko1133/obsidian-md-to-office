@@ -88,6 +88,11 @@ function errorMessage(error: unknown): string {
 }
 
 /** 「両方」のノートの結果をまとめる（失敗 > スキップ > 成功: D5）。同じ警告（2 回組み立てるので重なる）は 1 つにする。 */
+/** 3 つ以上の形式の結果をまとめる（Word・Excel・PDF: H1-PDF）。先頭の結果を基準にする。 */
+export function mergeAllResults(results: readonly NoteResult[]): NoteResult {
+	return results.slice(1).reduce((merged, next) => mergeResults(merged, next), results[0]);
+}
+
 export function mergeResults(docx: NoteResult, xlsx: NoteResult): NoteResult {
 	const files = [...docx.files, ...xlsx.files];
 	const seen = new Set<string>();

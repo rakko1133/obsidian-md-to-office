@@ -1,6 +1,6 @@
 # 設定の一覧
 
-最終更新: 2026-11-18（フェーズ 5b で Word の体裁の設定をすべて作った）
+最終更新: 2026-11-19（フェーズ 7 で PDF の設定を足し、出力形式の初期値を複数選択にした）
 段階: フェーズ 0 で作成（G5・完了条件 E1）。「実装」が 0 と 1 の項目はフェーズ 1 までに実装する。既定値はフェーズ 1 の決定事項（requirements.md）を反映済み
 
 - 設定値は `data.json` に保存する。型と既定値の実装は `src/core/settings.ts`、画面は `src/obsidian/settings-tab.ts`
@@ -17,7 +17,7 @@
 | `outputRoot` | Vault 内のフォルダのパス | `_export` | G4, R8 | 0 |
 | `externalOutputRoot` | Vault 外の絶対パス | 空（未設定） | G4 | 1 |
 | `saveMode` | `mirror`（ミラー出力）/ `sameFolder`（同一フォルダ） | `mirror` | R1, R8 | 1 |
-| `defaultFormat` | `word` / `excel` / `both` | `word` | R8 | 4b |
+| `defaultFormats` | 形式の配列（`word` / `excel` / `pdf` の 1 つ以上）。1.0 までの `defaultFormat`（`word` / `excel` / `both`）は読み込むときに移す | `["word"]` | R8, H1-PDF | 7（4b の `defaultFormat` を置き換え） |
 | `onConflict` | `overwrite` / `skip` / `rename`（連番） | `overwrite` | R3 | 1 |
 | `onError` | `continue` / `failFast` | `continue` | R3 | 1 |
 | `timeoutSeconds` | 正の整数（秒） | `30` | R3 | 1 |
@@ -90,6 +90,17 @@ frontmatter の `export: false` による除外は常に有効で、設定は持
 | `excelSourceColumns` | 真偽値（「元ノート」「見出し」の列を付ける） | `false`（集計では常に付ける） | D-5 | 4b |
 
 単一ノートの変換は `excelBookUnit` に関係なく `{ノート名}.xlsx` になる（R8: 実行する件数が 1 件のとき）。
+
+## PDF（H1-PDF）
+
+| キー | 値 | 既定値 | 要件 | 実装 |
+|---|---|---|---|---|
+| `pdfPaperSize` | `A4` / `A3` / `B5`（JIS）/ `Letter` | `A4` | H1-PDF | 7 |
+| `pdfOrientation` | `portrait` / `landscape` | `portrait` | H1-PDF | 7 |
+| `pdfMarginsMm` | 上・下・左・右（mm） | 各 `25` | H1-PDF | 7 |
+| `pdfScale` | 10〜200 の整数（%） | `100` | H1-PDF | 7 |
+
+表紙・目次・ヘッダー・フッター・結合出力の並び順は Word の設定（`coverPage`・`tableOfContents`・`headerTitle`・`footerPageNumber`・`combineOrder`・`defaultCombine`）を共用する（フェーズ 7 の決定事項）。
 
 ## 設定を持たないと決めたもの
 

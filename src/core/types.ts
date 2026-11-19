@@ -71,7 +71,7 @@ export interface FileResult {
 	diagramIndex?: number;
 }
 
-export type OutputKind = "image" | "docx" | "xlsx";
+export type OutputKind = "image" | "docx" | "xlsx" | "pdf";
 
 /** ノートごとの結果（03 が集約: D5）。状態は出力のうちいちばん重いもの（失敗 > スキップ > 成功）。 */
 export interface NoteResult {

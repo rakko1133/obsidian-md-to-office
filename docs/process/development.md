@@ -54,7 +54,7 @@ Obsidian の中でしか確かめられない処理（Mermaid・描画の取り�
 
 1. Obsidian でテスト用 Vault を開いておく（後ろや最小化でよい）。初回だけ、開発用ビルドを配置してからプラグインを無効 → 有効にする
 2. `npm run build:dev` → `npm run deploy:test-vault`。プラグインが `main.js` の変化に気づいて、自分で読み込み直す（数秒）
-3. `npm run obsidian:run -- --mode xlsx --path excel`（`--mode` は `mermaid` / `docx` / `xlsx`（PDF 出力の試作は `pdf`。出力は `_export/pdf/`）、`--path` は複数可で空文字は Vault 全体、`--set excelSheetUnit=perTable` でこの実行だけ設定を変える）
+3. `npm run obsidian:run -- --mode xlsx --path excel`（`--mode` は `mermaid` / `docx` / `xlsx` / `pdf` / `both` / `office`（`office` は設定 `defaultFormats` の形式。`--set 'defaultFormats=["word","pdf"]'` で組み合わせを試せる）、`--path` は複数可で空文字は Vault 全体、`--set excelSheetUnit=perTable` でこの実行だけ設定を変える）
 4. 確認画面と結果画面は出さずに変換し、結果（ノートごとの状態・出力ファイル・警告）を表示する。続けて `npm run preview:export` で見た目を確かめる
 
 - 仕組み: プラグインのフォルダ（`test-vault/.obsidian/plugins/batch-office-export/`）に `dev-request.json` を置くと、プラグインが 1 秒ごとに見つけて実行し、`dev-result.json` に結果を書く。読み込んだときに `dev-status.json`（読み込んだ日時・`main.js` の更新日時）を書く。`--wait-reload` は読み込み直しを待つだけ
@@ -126,6 +126,18 @@ Obsidian を使う確認は自動化していない（G5）。テスト用 Vault
 - [ ] D4: 書き出した後も、Obsidian のプレビューの Mermaid の表示（テーマ・フォント）が書き出す前と同じ。`phase1/user-directive.md` のプレビューは dark のまま、書き出した画像は neutral になる
 - [ ] E1: 書き出した後、`_export/` の中に `.tmp` で終わるファイルがない。元のノートの更新日時が変わっていない
 - [ ] E2: 結果レポートに件数（成功・スキップ・失敗）と警告が出る。`phase1/folder-a/broken.md` は失敗、`no-diagram.md` はスキップになる。`test-vault/.obsidian/plugins/batch-office-export/export-manifest.json` に、`_export/...` の相対パスで記録されている
+
+## フェーズ 7 の確認（PDF 出力・完了条件 A〜F）
+
+PDF は `npm run preview:export` の対象外（Word / Excel を PDF にする道具のため）。PyMuPDF でページ数・しおり・リンク・文書プロパティを読み、ページを画像にして確かめた。
+
+- [x] 1 ノート = 1 PDF（2026-11-19 Claude が自動実行で確認）: `npm run obsidian:run -- --mode pdf --path word3a --path word3b --path mermaid`。46 件すべて成功。数式・Dataview・Mermaid（全図種）・画像・コールアウト・コードの色付け・脚注が表示どおり。しおりとフッターの「n / 総ページ数」が入る
+- [x] ダークテーマ: 実行の間だけライトテーマになり、PDF は明るい色。実行の後は元のテーマに戻る（一時的なコードで body をダークにして確認）
+- [x] 結合出力: `--mode pdf --path combine --combine --set coverPage=true --set headerTitle=true --set combineOrder=moc`。`combine.pdf`（表紙・目次・3 章）と `sub/sub.pdf`。MOC の順、しおりの 1 段目がノート名、表紙にヘッダー・フッターが出ない、目次から本文へ飛べる、別のフォルダの PDF へのリンク（`sub/sub.pdf`・`../word3a/01-internal-links.pdf`）
+- [x] ページ設定: `--set pdfPaperSize=A3 --set pdfOrientation=landscape --set pdfScale=150` で 420×297mm。同名ファイルの `skip`・`rename`（`01-math (1).pdf`）
+- [x] 形式の組み合わせ: `--mode office --set 'defaultFormats=["word","excel","pdf"]'` で .docx・.xlsx・.pdf が同時にできる
+- [x] 確認画面（一時的なコードで DOM を読み出して確認）: Word / Excel / PDF のチェックボックスと結合出力。形式を変えると題名（「PDF に変換」「Word / PDF に変換」）と予定が変わる
+- [ ] 設定画面の PDF の区分の見た目（画面での確認はしていない）
 
 ## フェーズ 5b の手動確認（完了条件 A）
 

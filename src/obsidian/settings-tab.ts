@@ -1,6 +1,6 @@
-// 設定画面（G5）。項目の一覧と既定値は docs/design/settings.md に従う。フェーズ 3b までの項目を出す。
+// 設定画面（G5）。項目の一覧と既定値は docs/design/settings.md に従う。
 import { App, PluginSettingTab, Setting } from "obsidian";
-import { DEFAULT_SETTINGS, normalizeSettings, parseLines, type PluginSettings } from "../core/settings";
+import { DEFAULT_SETTINGS, OUTPUT_FORMATS, normalizeSettings, parseLines, type PluginSettings } from "../core/settings";
 import { t } from "../i18n";
 import type BatchOfficeExportPlugin from "../main";
 
@@ -24,17 +24,21 @@ export class BatchOfficeExportSettingTab extends PluginSettingTab {
 
 		// 出力
 		new Setting(containerEl).setName(t("settings.heading.output")).setHeading();
-		new Setting(containerEl)
-			.setName(t("settings.defaultFormat.name"))
-			.setDesc(t("settings.defaultFormat.desc"))
-			.addDropdown((d) =>
-				d
-					.addOption("word", t("format.word"))
-					.addOption("excel", t("format.excel"))
-					.addOption("both", t("format.both"))
-					.setValue(s.defaultFormat)
-					.onChange(async (v) => save("defaultFormat", v as PluginSettings["defaultFormat"])),
-			);
+		const formats = new Setting(containerEl).setName(t("settings.defaultFormats.name")).setDesc(t("settings.defaultFormats.desc"));
+		for (const format of OUTPUT_FORMATS) {
+			formats.addToggle((tg) => {
+				tg.setTooltip(t(`format.${format}`))
+					.setValue(s.defaultFormats.includes(format))
+					.onChange(async (v) => {
+						const current = new Set(this.plugin.settings.defaultFormats);
+						if (v) current.add(format);
+						else current.delete(format);
+						// 全部外したときは既定値（Word）に戻る（normalizeSettings）
+						await save("defaultFormats", OUTPUT_FORMATS.filter((f) => current.has(f)));
+					});
+				tg.toggleEl.insertAdjacentText("beforebegin", t(`format.${format}`));
+			});
+		}
 		new Setting(containerEl)
 			.setName(t("settings.outputLocation.name"))
 			.setDesc(t("settings.outputLocation.desc"))
@@ -285,6 +289,41 @@ export class BatchOfficeExportSettingTab extends PluginSettingTab {
 			.setName(t("settings.excelSourceColumns.name"))
 			.setDesc(t("settings.excelSourceColumns.desc"))
 			.addToggle((tg) => tg.setValue(s.excelSourceColumns).onChange(async (v) => save("excelSourceColumns", v)));
+
+		// PDF（H1-PDF）: ページ設定だけ Word と別に持つ
+		new Setting(containerEl).setName(t("settings.heading.pdf")).setHeading();
+		new Setting(containerEl).setDesc(t("settings.pdf.desc"));
+		new Setting(containerEl).setName(t("settings.paperSize.name")).addDropdown((d) =>
+			d
+				.addOption("A4", "A4")
+				.addOption("A3", "A3")
+				.addOption("B5", "B5")
+				.addOption("Letter", "Letter")
+				.setValue(s.pdfPaperSize)
+				.onChange(async (v) => save("pdfPaperSize", v as PluginSettings["pdfPaperSize"])),
+		);
+		new Setting(containerEl).setName(t("settings.orientation.name")).addDropdown((d) =>
+			d
+				.addOption("portrait", t("settings.orientation.portrait"))
+				.addOption("landscape", t("settings.orientation.landscape"))
+				.setValue(s.pdfOrientation)
+				.onChange(async (v) => save("pdfOrientation", v as PluginSettings["pdfOrientation"])),
+		);
+		const pdfMargin = new Setting(containerEl).setName(t("settings.margins.name"));
+		for (const side of ["top", "bottom", "left", "right"] as const) {
+			pdfMargin.addText((text) => {
+				text.inputEl.type = "number";
+				text.inputEl.addClass("batch-office-export-margin-input");
+				text.setValue(String(s.pdfMarginsMm[side])).onChange(async (v) => save("pdfMarginsMm", { ...this.plugin.settings.pdfMarginsMm, [side]: Number(v) }));
+			});
+		}
+		new Setting(containerEl)
+			.setName(t("settings.pdfScale.name"))
+			.setDesc(t("settings.pdfScale.desc"))
+			.addText((text) => {
+				text.inputEl.type = "number";
+				text.setValue(String(s.pdfScale)).onChange(async (v) => save("pdfScale", Number(v)));
+			});
 	}
 
 	override hide(): void {

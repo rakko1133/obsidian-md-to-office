@@ -29,11 +29,16 @@ export interface Chapter {
 	order?: number;
 }
 
-/** 結合出力の .docx の出力先（1 フォルダ = 1 つの .docx: R8・C-8）。 */
-export function combinedOutputRef(notePath: string, settings: Pick<PluginSettings, "saveMode" | "outputLocation" | "outputRoot">, vaultName: string): OutputRef {
+/** 結合出力の出力先（1 フォルダ = 1 つの .docx / .pdf: R8・C-8・H1-PDF）。 */
+export function combinedOutputRef(
+	notePath: string,
+	settings: Pick<PluginSettings, "saveMode" | "outputLocation" | "outputRoot">,
+	vaultName: string,
+	extension: "docx" | "pdf" = "docx",
+): OutputRef {
 	const dir = outputDirFor(notePath, settings);
 	const folder = dirName(notePath);
-	return { location: dir.location, path: joinPath(dir.path, `${folder === "" ? vaultName || "Vault" : baseName(folder)}.docx`) };
+	return { location: dir.location, path: joinPath(dir.path, `${folder === "" ? vaultName || "Vault" : baseName(folder)}.${extension}`) };
 }
 
 /** フォルダの MOC（フォルダと同じ名前のノート。Vault 直下は Vault と同じ名前）のパス。 */

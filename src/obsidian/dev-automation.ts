@@ -8,7 +8,6 @@ import { TFolder, type TAbstractFile } from "obsidian";
 import type { PluginSettings } from "../core/settings";
 import type BatchOfficeExportPlugin from "../main";
 import { runExport, type ExportMode } from "./export-runner";
-import { runPdfPrototype, type PdfPrototypeOptions } from "./pdf-prototype";
 
 const POLL_MS = 1000;
 const REQUEST_FILE = "dev-request.json";
@@ -80,9 +79,6 @@ export function registerDevAutomation(plugin: BatchOfficeExportPlugin, pluginDir
 			else missing.push(path);
 		}
 		if (missing.length > 0) return { error: `not found: ${missing.join(", ")}` };
-		if ((request.mode as string) === "pdf") {
-			return runPdfPrototype(plugin.app, items, { ...(request.settings as PdfPrototypeOptions | undefined), ...(request.combine ? { combine: true } : {}) });
-		}
 		const source = items.length === 1 && items[0] instanceof TFolder && items[0].isRoot() ? ({ kind: "vault" } as const) : ({ kind: "items", items } as const);
 		const report = await runExport(
 			{ app: plugin.app, settings: plugin.settings, pluginDir },

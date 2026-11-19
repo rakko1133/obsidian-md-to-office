@@ -76,7 +76,7 @@ async function renderBlock(app: App, lang: string, source: string, sourcePath: s
 }
 
 /** DOM の変化が QUIET_MS 続けて止まるまで待つ。上限を超えたら時間切れ、ノートのタイムアウトなら打ち切り。 */
-function waitForQuiet(el: HTMLElement, signal?: AbortSignal): Promise<void> {
+export function waitForQuiet(el: HTMLElement, signal?: AbortSignal): Promise<void> {
 	return new Promise((resolve, reject) => {
 		let quiet = window.setTimeout(done, QUIET_MS);
 		const limit = window.setTimeout(() => finish(new Error(`timeout (${MAX_WAIT_MS / 1000} s)`)), MAX_WAIT_MS);

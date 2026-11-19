@@ -1,6 +1,12 @@
 // プラグインの設定値の型と既定値。Obsidian API に依存しない（G2・G4）。
 // 設定項目の一覧と既定値の正本は docs/design/settings.md。
 
+/** 出力形式（R8・H1-PDF）。 */
+export type OutputFormat = "word" | "excel" | "pdf";
+
+/** 出力形式の並び（確認画面・設定画面の表示順と、実行の順）。 */
+export const OUTPUT_FORMATS: readonly OutputFormat[] = ["word", "excel", "pdf"];
+
 export interface PluginSettings {
 	/** 出力先の場所（G4） */
 	outputLocation: "vault" | "external";
@@ -68,8 +74,8 @@ export interface PluginSettings {
 	excelOutlineMode: boolean;
 	/** 各表の左に「元ノート」「見出し」の列を足す（D-5 のオプション） */
 	excelSourceColumns: boolean;
-	/** 確認画面の出力形式の初期値（R8） */
-	defaultFormat: "word" | "excel" | "both";
+	/** 確認画面で最初に選ばれている出力形式（R8・H1-PDF）。1 つ以上 */
+	defaultFormats: OutputFormat[];
 	/** フッター中央のページ番号（C-5） */
 	footerPageNumber: boolean;
 	/** ヘッダーに文書のタイトル（C-5） */
@@ -94,6 +100,14 @@ export interface PluginSettings {
 	figureCaptions: boolean;
 	/** 表番号（C-4b） */
 	tableCaptions: boolean;
+	/** PDF の用紙サイズ（H1-PDF。Word とは別） */
+	pdfPaperSize: "A4" | "A3" | "B5" | "Letter";
+	/** PDF の印刷の向き（H1-PDF） */
+	pdfOrientation: "portrait" | "landscape";
+	/** PDF の余白（mm）（H1-PDF） */
+	pdfMarginsMm: { top: number; bottom: number; left: number; right: number };
+	/** PDF の拡大率（%、10〜200）（H1-PDF） */
+	pdfScale: number;
 }
 
 export const DEFAULT_SETTINGS: Readonly<PluginSettings> = {
@@ -131,7 +145,7 @@ export const DEFAULT_SETTINGS: Readonly<PluginSettings> = {
 	excelAsTable: true,
 	excelOutlineMode: false,
 	excelSourceColumns: false,
-	defaultFormat: "word",
+	defaultFormats: ["word"],
 	footerPageNumber: true,
 	headerTitle: false,
 	coverPage: false,
@@ -144,6 +158,10 @@ export const DEFAULT_SETTINGS: Readonly<PluginSettings> = {
 	tableFullWidth: false,
 	figureCaptions: false,
 	tableCaptions: false,
+	pdfPaperSize: "A4",
+	pdfOrientation: "portrait",
+	pdfMarginsMm: { top: 25, bottom: 25, left: 25, right: 25 },
+	pdfScale: 100,
 };
 
 /**
@@ -191,7 +209,7 @@ export function normalizeSettings(raw: unknown): PluginSettings {
 		excelAsTable: typeof data.excelAsTable === "boolean" ? data.excelAsTable : d.excelAsTable,
 		excelOutlineMode: typeof data.excelOutlineMode === "boolean" ? data.excelOutlineMode : d.excelOutlineMode,
 		excelSourceColumns: typeof data.excelSourceColumns === "boolean" ? data.excelSourceColumns : d.excelSourceColumns,
-		defaultFormat: oneOf(data.defaultFormat, ["word", "excel", "both"], d.defaultFormat),
+		defaultFormats: formats(data.defaultFormats, data.defaultFormat, d.defaultFormats),
 		footerPageNumber: typeof data.footerPageNumber === "boolean" ? data.footerPageNumber : d.footerPageNumber,
 		headerTitle: typeof data.headerTitle === "boolean" ? data.headerTitle : d.headerTitle,
 		coverPage: typeof data.coverPage === "boolean" ? data.coverPage : d.coverPage,
@@ -204,6 +222,10 @@ export function normalizeSettings(raw: unknown): PluginSettings {
 		tableFullWidth: typeof data.tableFullWidth === "boolean" ? data.tableFullWidth : d.tableFullWidth,
 		figureCaptions: typeof data.figureCaptions === "boolean" ? data.figureCaptions : d.figureCaptions,
 		tableCaptions: typeof data.tableCaptions === "boolean" ? data.tableCaptions : d.tableCaptions,
+		pdfPaperSize: oneOf(data.pdfPaperSize, ["A4", "A3", "B5", "Letter"], d.pdfPaperSize),
+		pdfOrientation: oneOf(data.pdfOrientation, ["portrait", "landscape"], d.pdfOrientation),
+		pdfMarginsMm: margins(data.pdfMarginsMm, d.pdfMarginsMm),
+		pdfScale: typeof data.pdfScale === "number" && Number.isInteger(data.pdfScale) && data.pdfScale >= 10 && data.pdfScale <= 200 ? data.pdfScale : d.pdfScale,
 	};
 }
 
@@ -224,6 +246,20 @@ export function parseLines(text: string): string[] {
 
 function oneOf<T extends string>(value: unknown, allowed: readonly T[], fallback: T): T {
 	return typeof value === "string" && (allowed as readonly string[]).includes(value) ? (value as T) : fallback;
+}
+
+/**
+ * 出力形式の初期値。形式の配列（重複・不明な値は除き、表示順にそろえる）。空なら既定値。
+ * 1.0 までの defaultFormat（word / excel / both）しかなければ、それを移す（both → Word と Excel）。
+ */
+function formats(value: unknown, legacy: unknown, fallback: readonly OutputFormat[]): OutputFormat[] {
+	if (Array.isArray(value)) {
+		const picked = OUTPUT_FORMATS.filter((f) => value.includes(f));
+		return picked.length > 0 ? picked : [...fallback];
+	}
+	if (legacy === "word" || legacy === "excel") return [legacy];
+	if (legacy === "both") return ["word", "excel"];
+	return [...fallback];
 }
 
 function bool(value: unknown, fallback: boolean): boolean {

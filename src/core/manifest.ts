@@ -72,7 +72,7 @@ function isEntry(value: unknown): value is ManifestEntry {
 		typeof o.path === "string" &&
 		Array.isArray(value.sources) &&
 		value.sources.every((s) => typeof s === "string") &&
-		(value.kind === "image" || value.kind === "docx" || value.kind === "xlsx") &&
+		(value.kind === "image" || value.kind === "docx" || value.kind === "xlsx" || value.kind === "pdf") &&
 		typeof value.contentHash === "string" &&
 		typeof value.writtenAt === "string" &&
 		(value.diagramIndex === undefined || typeof value.diagramIndex === "number")

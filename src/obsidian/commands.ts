@@ -1,5 +1,5 @@
 // 起動方法の登録（R2）: ファイル・フォルダの右クリック、複数選択の右クリック、コマンド「現在のノート」「Vault 全体」。
-// 「Mermaid 画像として保存」（フェーズ 1）・「Word に変換」（フェーズ 2）・「Excel に変換」（フェーズ 4a）を、同じ 4 つの起動方法から呼べるようにする。
+// 「Mermaid 画像として保存」（フェーズ 1）・「Word に変換」（フェーズ 2）・「Excel に変換」（フェーズ 4a）・「PDF に変換」（フェーズ 7）を、同じ 4 つの起動方法から呼べるようにする。
 import type { Menu, TAbstractFile } from "obsidian";
 import { t, type MessageKey } from "../i18n";
 import { hasConvertibleItem, type TargetSource } from "./collect";
@@ -28,6 +28,13 @@ const ENTRIES: readonly ModeEntry[] = [
 		icon: "sheet",
 		activeCommand: { id: "convert-excel-current-note", name: "command.convertExcelActive" },
 		vaultCommand: { id: "convert-excel-vault", name: "command.convertExcelVault" },
+	},
+	{
+		mode: "pdf",
+		menu: "menu.convertPdf",
+		icon: "file-output",
+		activeCommand: { id: "convert-pdf-current-note", name: "command.convertPdfActive" },
+		vaultCommand: { id: "convert-pdf-vault", name: "command.convertPdfVault" },
 	},
 	{
 		mode: "office",
