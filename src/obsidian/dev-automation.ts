@@ -23,6 +23,8 @@ interface DevRequest {
 	settings?: Partial<PluginSettings>;
 	/** 1 フォルダを 1 つの .docx にまとめる（C-8） */
 	combine?: boolean;
+	/** 処理時間を計測して、結果に付ける */
+	profile?: boolean;
 }
 
 export function registerDevAutomation(plugin: BatchOfficeExportPlugin, pluginDir: string): void {
@@ -84,12 +86,13 @@ export function registerDevAutomation(plugin: BatchOfficeExportPlugin, pluginDir
 			{ app: plugin.app, settings: plugin.settings, pluginDir },
 			request.mode,
 			source,
-			{ ...(request.settings ? { settings: request.settings } : {}), ...(request.combine ? { combine: true } : {}) },
+			{ ...(request.settings ? { settings: request.settings } : {}), ...(request.combine ? { combine: true } : {}), ...(request.profile ? { profile: true } : {}) },
 		);
 		if (!report) return { error: "not run (already running, no targets, or cancelled)" };
 		return {
 			end: report.end,
 			runWarnings: report.runWarnings,
+			...(report.profile ? { profile: report.profile } : {}),
 			results: report.results.map((r) => ({
 				notePath: r.notePath,
 				status: r.status,

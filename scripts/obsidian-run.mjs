@@ -6,7 +6,8 @@
 //   node scripts/obsidian-run.mjs --wait-reload        # 配置した main.js を Obsidian が読み込み直すまで待つだけ
 //
 // オプション: --mode mermaid|docx|xlsx|pdf|both|summary（既定 docx）、--combine（1 フォルダを 1 つの .docx / .pdf にまとめる）、--path（複数可。空文字で Vault 全体）、--set キー=値（複数可。この実行だけの設定。
-// 値は JSON として読めればその値、読めなければ文字列）、--timeout 秒（既定 300）、--json（結果をそのまま出す）
+// 値は JSON として読めればその値、読めなければ文字列）、--timeout 秒（既定 300）、--json（結果をそのまま出す）、
+// --profile（処理時間を計測して、段ごとの表を出す。docs/process/development.md の「処理時間の計測」）
 import { existsSync, readFileSync, statSync, unlinkSync, writeFileSync } from "node:fs";
 import { join } from "node:path";
 import { randomUUID } from "node:crypto";
@@ -17,7 +18,7 @@ const RESULT = join(PLUGIN_DIR, "dev-result.json");
 const STATUS = join(PLUGIN_DIR, "dev-status.json");
 
 const args = process.argv.slice(2);
-const opts = { mode: "docx", paths: [], settings: {}, timeout: 300, json: false, waitReload: false, combine: false };
+const opts = { mode: "docx", paths: [], settings: {}, timeout: 300, json: false, waitReload: false, combine: false, profile: false };
 for (let i = 0; i < args.length; i++) {
 	const a = args[i];
 	if (a === "--mode") opts.mode = args[++i];
@@ -33,6 +34,7 @@ for (let i = 0; i < args.length; i++) {
 	} else if (a === "--timeout") opts.timeout = Number(args[++i]);
 	else if (a === "--json") opts.json = true;
 	else if (a === "--combine") opts.combine = true;
+	else if (a === "--profile") opts.profile = true;
 	else if (a === "--wait-reload") opts.waitReload = true;
 	else {
 		console.error(`unknown option: ${a}`);
@@ -72,7 +74,7 @@ if (opts.paths.length === 0) {
 
 const id = randomUUID();
 if (existsSync(RESULT)) unlinkSync(RESULT);
-writeFileSync(REQUEST, JSON.stringify({ id, mode: opts.mode, paths: opts.paths, settings: opts.settings, combine: opts.combine }, null, "\t"));
+writeFileSync(REQUEST, JSON.stringify({ id, mode: opts.mode, paths: opts.paths, settings: opts.settings, combine: opts.combine, profile: opts.profile }, null, "\t"));
 
 let result = null;
 while (Date.now() < deadline) {
@@ -108,5 +110,16 @@ if (opts.json) {
 		for (const w of r.warnings) console.log(`  warning: ${r.notePath}: ${w.code}${w.detail ? ` ${w.detail}` : ""}`);
 	}
 	for (const w of result.runWarnings) console.log(`  run warning: ${w.code}${w.detail ? ` ${w.detail}` : ""}`);
+	if (result.profile) printProfile(result.profile);
 }
 process.exit(result.error || result.results?.some((r) => r.status === "failed") ? 1 : 0);
+
+/** 処理時間の表（ラベル順。入れ子の段の時間は親にも含まれる）。 */
+function printProfile(profile) {
+	const width = Math.max(5, ...profile.entries.map((e) => e.label.length));
+	const num = (ms) => ms.toFixed(1).padStart(10);
+	console.log("");
+	console.log(`${"label".padEnd(width)}  ${"count".padStart(6)} ${"total ms".padStart(10)} ${"avg ms".padStart(10)} ${"max ms".padStart(10)}`);
+	for (const e of profile.entries) console.log(`${e.label.padEnd(width)}  ${String(e.count).padStart(6)} ${num(e.totalMs)} ${num(e.totalMs / e.count)} ${num(e.maxMs)}`);
+	console.log(`wall: ${profile.wallMs.toFixed(1)} ms`);
+}
