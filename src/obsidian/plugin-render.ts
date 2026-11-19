@@ -196,6 +196,7 @@ const MIME_EXTENSIONS: Record<string, string> = {
 };
 
 async function fetchImage(url: string): Promise<ImageAsset> {
+	await rejectIfTooLarge(url);
 	const response = await timed("asset/fetchImage/request", () => requestUrl({ url, throw: false }));
 	if (response.status >= 400) throw new Error(`HTTP ${response.status}`);
 	const bytes = new Uint8Array(response.arrayBuffer);
@@ -204,6 +205,23 @@ async function fetchImage(url: string): Promise<ImageAsset> {
 	const fromUrl = /\.([a-z0-9]+)(?:[?#]|$)/i.exec(url)?.[1]?.toLowerCase();
 	const ext = MIME_EXTENSIONS[type] ?? fromUrl ?? "png";
 	return loadImage(bytes, ext === "jpeg" ? "jpg" : ext);
+}
+
+/**
+ * ダウンロードする前に、HEAD の Content-Length で大きさを確かめる。
+ * requestUrl は本文を全部読み込んでから返すので、GET の後の検査だけでは大きなファイルの取得を止められない。
+ * HEAD に答えないサーバーや Content-Length のない応答では何もしない（GET の後の検査に任せる）。
+ */
+async function rejectIfTooLarge(url: string): Promise<void> {
+	let length: number;
+	try {
+		const head = await timed("asset/fetchImage/head", () => requestUrl({ url, method: "HEAD", throw: false }));
+		if (head.status >= 400) return;
+		length = Number(head.headers["content-length"] ?? head.headers["Content-Length"]);
+	} catch {
+		return;
+	}
+	if (Number.isFinite(length) && length > MAX_DOWNLOAD_BYTES) throw new Error(`larger than ${MAX_DOWNLOAD_BYTES / 1024 / 1024} MB`);
 }
 
 /**
