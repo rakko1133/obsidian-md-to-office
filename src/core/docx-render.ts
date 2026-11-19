@@ -33,6 +33,7 @@ import {
 	TableLayoutType,
 	TableRow,
 	TextRun,
+	type IRunOptions,
 	WidthType,
 	convertMillimetersToTwip,
 	type ILevelsOptions,
@@ -543,7 +544,7 @@ class Renderer {
 		const rows = entries.map(
 			([key, value]) =>
 				new TableRow({
-					children: [this.gridCell([new Paragraph({ children: [new TextRun({ text: key, bold: true })] })], true), this.gridCell([new Paragraph({ children: [new TextRun(value)] })], false)],
+					children: [this.gridCell([new Paragraph({ children: [new TextRun({ text: key, bold: true } satisfies IRunOptions)] })], true), this.gridCell([new Paragraph({ children: [new TextRun(value)] })], false)],
 				}),
 		);
 		return this.gridTable(rows, 2);
@@ -736,7 +737,7 @@ class Renderer {
 			...(format.superScript ? { superScript: true } : {}),
 			...(format.subScript ? { subScript: true } : {}),
 			...(format.color ? { color: format.color } : {}),
-		});
+		} satisfies IRunOptions);
 	}
 }
 
@@ -758,7 +759,7 @@ export async function renderDocx(tree: Root, options: DocxRenderOptions): Promis
 	// 目次（C-4a）: 見出し 1〜3 の TOC フィールド。開いたときに Word が更新する（updateFields）
 	if (options.tableOfContents !== undefined) {
 		children.push(
-			new Paragraph({ children: [new TextRun({ text: options.tableOfContents, bold: true, size: 32 })] }),
+			new Paragraph({ children: [new TextRun({ text: options.tableOfContents, bold: true, size: 32 } satisfies IRunOptions)] }),
 			new TableOfContents(options.tableOfContents, { hyperlink: true, headingStyleRange: "1-3" }),
 			new Paragraph({ children: [new DocxPageBreak()] }),
 		);
