@@ -1,7 +1,7 @@
 {
 	"id": "batch-office-export",
 	"name": "Batch Office Export",
-	"version": "1.1.2",
+	"version": "1.1.3",
 	"minAppVersion": "1.15.1",
 	"description": "Batch-convert notes to Word (.docx), Excel (.xlsx) and PDF, with Mermaid diagrams as images.",
 	"author": "rakko1133",
