@@ -8,6 +8,13 @@
 
 ---
 
+## 2026-11-19 1.1.2 の公開（高速化）
+
+- ユーザーの指示（「1.1.2 で公開する」）で、高速化の対策 1・2 を 1.1.2 として公開した。計測の仕組み（`feat/profiling`）・PNG の符号化（`fix/png-encode-wait`）・静止待ち（`fix/render-quiet-wait`）を `main` にマージ（`7eb6bce`・`3c9ddca`・`e78f21f`）してから、版を上げた（`890f51c`）
+- 確認: `npm run lint`（エラー 0、警告 8 は以前のまま）・`npm run notices:check`・単体テスト 295 件・本番ビルド 3.81 MB。自動レビューの対象の文字列（`createElement("script")`・`new Function`・`manifest.json`・`main.js`）は本番ビルドで 0 件。開発用の自動実行は本番ビルドに入っていない
+- 公開: `main` とタグ `1.1.2` を push し、GitHub Release 1.1.2 に `main.js`・`manifest.json`・`styles.css` を添付した。添付した 3 つは手元の本番ビルドと同じ（SHA-256 で確認）。リリースノートは英語（Word 41 s → 6 s、Excel 5.4 s → 0.4 s、PDF 38 s → 21 s）
+- テスト用 Vault は開発用ビルドに戻した
+
 ## 2026-11-19 描画の静止待ちを縮める（A-24・H1-PDF・高速化の対策 2）
 
 - きっかけ: 対策 1 の後、描画の静止待ち（DOM の変化が 500 ms 止まるまで待つ）が PDF で全体の 70%、Word で 82% を占めていた。ユーザーが「静止待ちも試す」を選んだ
